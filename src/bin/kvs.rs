@@ -9,32 +9,42 @@ use clap::{App, Arg, SubCommand};
 
 fn main() {
     let matches = App::new("MyApp")
-                        .about("key value store")
-                        .version(env!("CARGO_PKG_VERSION"))
-                        .author("Maxb") 
-                        .subcommand(SubCommand::with_name("get")
-                                                .about("get a key")
-                                                .arg(Arg::with_name("key")
-                                                            .help("the key to fetch")
-                                                            .index(1)
-                                                            .required(true)))
-                        .subcommand(SubCommand::with_name("set")
-                                                .about("set a key")
-                                                .arg(Arg::with_name("key")
-                                                            .help("the key to set")
-                                                            .index(1)
-                                                            .required(true))
-                                                .arg(Arg::with_name("value")
-                                                            .help("the value to set to")
-                                                            .index(2)
-                                                            .required(true)))
-                        .subcommand(SubCommand::with_name("rm")
-                                                .about("remove a key")
-                                                .arg(Arg::with_name("key")
-                                                            .help("the key to remove")
-                                                            .index(1)
-                                                            .required(true)))
-                        .get_matches();
+        .about("key value store")
+        .version(env!("CARGO_PKG_VERSION"))
+        .author("Maxb")
+        .subcommand(
+            SubCommand::with_name("get").about("get a key").arg(
+                Arg::with_name("key")
+                    .help("the key to fetch")
+                    .index(1)
+                    .required(true),
+            ),
+        )
+        .subcommand(
+            SubCommand::with_name("set")
+                .about("set a key")
+                .arg(
+                    Arg::with_name("key")
+                        .help("the key to set")
+                        .index(1)
+                        .required(true),
+                )
+                .arg(
+                    Arg::with_name("value")
+                        .help("the value to set to")
+                        .index(2)
+                        .required(true),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("rm").about("remove a key").arg(
+                Arg::with_name("key")
+                    .help("the key to remove")
+                    .index(1)
+                    .required(true),
+            ),
+        )
+        .get_matches();
 
     if let None = matches.subcommand_name() {
         process::exit(1);

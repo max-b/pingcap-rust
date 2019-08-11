@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-/// A Key Store mapping string keys to 
+/// A Key Store mapping string keys to
 /// string values
 pub struct KvStore {
-    store: HashMap<String, String>
+    store: HashMap<String, String>,
 }
 
 impl KvStore {
@@ -15,7 +15,7 @@ impl KvStore {
     /// ```
     pub fn new() -> Self {
         KvStore {
-            store: HashMap::new()
+            store: HashMap::new(),
         }
     }
 
