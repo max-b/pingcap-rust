@@ -1,0 +1,18 @@
+[package]
+name = "kvs"
+version = "0.1.0"
+authors = ["Max Bittman <maxb.personal@gmail.com>"]
+description = "A key-value store"
+edition = "2018"
+
+[lib]
+doctest = false
+test = false
+
+[dependencies]
+clap = "2.32.0"
+
+
+[dev-dependencies]
+assert_cmd = "0.11.1"
+predicates = "1.0.1"
