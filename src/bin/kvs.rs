@@ -1,13 +1,16 @@
 extern crate clap;
 extern crate kvs;
 
+use std::io;
+use std::io::prelude::*;
 use std::process;
+use std::path::Path;
 
 use kvs::KvStore;
 
 use clap::{App, Arg, SubCommand};
 
-fn main() {
+fn main() -> io::Result<()> {
     let matches = App::new("MyApp")
         .about("key value store")
         .version(env!("CARGO_PKG_VERSION"))
@@ -44,29 +47,33 @@ fn main() {
                     .required(true),
             ),
         )
+        .arg(
+            Arg::with_name("file")
+                .short("f")
+                .long("file")
+                .help("the path to the data file")
+                .takes_value(true)
+        )
         .get_matches();
 
+    let file_path = matches.value_of("file").unwrap_or("./data.log");
     if matches.subcommand_name().is_none() {
         process::exit(1);
     }
 
-    // let mut store = KvStore::new();
+    let mut store = KvStore::open(Path::new(file_path)).expect("can't open data.log");
 
-    if let Some(_matches) = matches.subcommand_matches("get") {
-        eprintln!("unimplemented");
-        process::exit(1);
-        // store.get(matches.value_of("key").unwrap().to_string());
+    if let Some(matches) = matches.subcommand_matches("get") {
+        store.get(matches.value_of("key").unwrap().to_string()).map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
     }
 
-    if let Some(_matches) = matches.subcommand_matches("set") {
-        eprintln!("unimplemented");
-        process::exit(1);
-        // store.set(matches.value_of("key").unwrap().to_string(), matches.value_of("value").unwrap().to_string());
+    if let Some(matches) = matches.subcommand_matches("set") {
+        store.set(matches.value_of("key").unwrap().to_string(), matches.value_of("value").unwrap().to_string()).map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;;
     }
 
-    if let Some(_matches) = matches.subcommand_matches("rm") {
-        eprintln!("unimplemented");
-        process::exit(1);
-        // store.remove(matches.value_of("key").unwrap().to_string());
+    if let Some(matches) = matches.subcommand_matches("rm") {
+        store.remove(matches.value_of("key").unwrap().to_string()).map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;;
     }
+
+    Ok(())
 }
