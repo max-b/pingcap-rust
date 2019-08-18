@@ -1,14 +1,14 @@
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
-use std::result;
-use std::path::Path;
-use std::io;
-use std::io::{BufReader, BufWriter, SeekFrom};
-use std::io::prelude::*;
-use std::fs::{File, OpenOptions};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-use serde::{Serialize, Deserialize};
+use std::fs::{File, OpenOptions};
+use std::io;
+use std::io::prelude::*;
+use std::io::{BufReader, BufWriter, SeekFrom};
+use std::path::Path;
+use std::result;
 
 #[derive(Debug)]
 pub enum KvStoreError {
@@ -72,7 +72,7 @@ pub type Result<T> = result::Result<T, KvStoreError>;
 #[derive(Serialize, Deserialize, Debug)]
 enum Record {
     Set(String, String),
-    Delete(String)
+    Delete(String),
 }
 
 /// A Key Store mapping string keys to
@@ -103,7 +103,11 @@ impl KvStore {
     /// ```
     pub fn open(dirpath: &Path) -> Result<Self> {
         let path = dirpath.join("data.log");
-        let file = OpenOptions::new().read(true).create(true).append(true).open(path)?;
+        let file = OpenOptions::new()
+            .read(true)
+            .create(true)
+            .append(true)
+            .open(path)?;
 
         let mut log_index: HashMap<String, u64> = HashMap::new();
 
@@ -117,10 +121,10 @@ impl KvStore {
             match record {
                 Record::Set(key, _value) => {
                     log_index.insert(key, file_pointer_location);
-                },
+                }
                 Record::Delete(key) => {
                     log_index.remove(&key);
-                },
+                }
             };
             file_pointer_location = reader.seek(SeekFrom::Current(0))?;
         }
@@ -165,12 +169,8 @@ impl KvStore {
 
                 let record: Record = bson::from_bson(bson_doc)?;
                 match record {
-                    Record::Set(_, value) => {
-                        Ok(Some(value))
-                    },
-                    Record::Delete(_) => {
-                        Ok(None)
-                    }
+                    Record::Set(_, value) => Ok(Some(value)),
+                    Record::Delete(_) => Ok(None),
                 }
             }
         }
@@ -202,7 +202,9 @@ impl KvStore {
             return Ok(());
         }
 
-        Err(KvStoreError::SerializationError("Error serializing record".to_owned()))
+        Err(KvStoreError::SerializationError(
+            "Error serializing record".to_owned(),
+        ))
     }
 
     /// Remove a String key
@@ -229,8 +231,10 @@ impl KvStore {
 
         match self.log_index.entry(key) {
             Entry::Vacant(_) => {
-                return Err(KvStoreError::NonExistentKeyError("Key not in store".to_owned()));
-            },
+                return Err(KvStoreError::NonExistentKeyError(
+                    "Key not in store".to_owned(),
+                ));
+            }
             Entry::Occupied(o) => {
                 record_option = Some(Record::Delete(o.key().to_string()));
                 o.remove_entry();
@@ -256,6 +260,8 @@ impl KvStore {
             return Ok(());
         }
 
-        Err(KvStoreError::SerializationError("Error serializing record".to_owned()))
+        Err(KvStoreError::SerializationError(
+            "Error serializing record".to_owned(),
+        ))
     }
 }

@@ -3,8 +3,8 @@ extern crate kvs;
 
 use std::io;
 use std::io::prelude::*;
-use std::process;
 use std::path::Path;
+use std::process;
 
 use kvs::KvStore;
 
@@ -52,7 +52,7 @@ fn main() -> io::Result<()> {
                 .short("p")
                 .long("data-path")
                 .help("the directory to store data in")
-                .takes_value(true)
+                .takes_value(true),
         )
         .get_matches();
 
@@ -64,23 +64,31 @@ fn main() -> io::Result<()> {
     let mut store = KvStore::open(Path::new(file_path)).expect("can't open KvStore");
 
     if let Some(matches) = matches.subcommand_matches("get") {
-        match store.get(matches.value_of("key").unwrap().to_owned()).map_err(|err| io::Error::new(io::ErrorKind::Other, err))? {
+        match store
+            .get(matches.value_of("key").unwrap().to_owned())
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
+        {
             Some(val) => {
                 println!("{}", val);
-            },
+            }
             None => {
                 println!("Key not found");
-            },
+            }
         }
     }
 
     if let Some(matches) = matches.subcommand_matches("set") {
-        store.set(matches.value_of("key").unwrap().to_owned(), matches.value_of("value").unwrap().to_owned()).map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;;
+        store
+            .set(
+                matches.value_of("key").unwrap().to_owned(),
+                matches.value_of("value").unwrap().to_owned(),
+            )
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
     }
 
     if let Some(matches) = matches.subcommand_matches("rm") {
         match store.remove(matches.value_of("key").unwrap().to_owned()) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(_) => {
                 println!("Key not found");
                 process::exit(1);
