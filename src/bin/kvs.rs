@@ -11,7 +11,7 @@ use kvs::KvStore;
 use clap::{App, Arg, SubCommand};
 
 fn main() -> io::Result<()> {
-    let matches = App::new("MyApp")
+    let matches = App::new("KvStore")
         .about("key value store")
         .version(env!("CARGO_PKG_VERSION"))
         .author("Maxb")
@@ -48,31 +48,44 @@ fn main() -> io::Result<()> {
             ),
         )
         .arg(
-            Arg::with_name("file")
-                .short("f")
-                .long("file")
-                .help("the path to the data file")
+            Arg::with_name("data-path")
+                .short("p")
+                .long("data-path")
+                .help("the directory to store data in")
                 .takes_value(true)
         )
         .get_matches();
 
-    let file_path = matches.value_of("file").unwrap_or("./data.log");
+    let file_path = matches.value_of("data-path").unwrap_or("./");
     if matches.subcommand_name().is_none() {
         process::exit(1);
     }
 
-    let mut store = KvStore::open(Path::new(file_path)).expect("can't open data.log");
+    let mut store = KvStore::open(Path::new(file_path)).expect("can't open KvStore");
 
     if let Some(matches) = matches.subcommand_matches("get") {
-        store.get(matches.value_of("key").unwrap().to_string()).map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        match store.get(matches.value_of("key").unwrap().to_owned()).map_err(|err| io::Error::new(io::ErrorKind::Other, err))? {
+            Some(val) => {
+                println!("{}", val);
+            },
+            None => {
+                println!("Key not found");
+            },
+        }
     }
 
     if let Some(matches) = matches.subcommand_matches("set") {
-        store.set(matches.value_of("key").unwrap().to_string(), matches.value_of("value").unwrap().to_string()).map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;;
+        store.set(matches.value_of("key").unwrap().to_owned(), matches.value_of("value").unwrap().to_owned()).map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;;
     }
 
     if let Some(matches) = matches.subcommand_matches("rm") {
-        store.remove(matches.value_of("key").unwrap().to_string()).map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;;
+        match store.remove(matches.value_of("key").unwrap().to_owned()) {
+            Ok(_) => {},
+            Err(_) => {
+                println!("Key not found");
+                process::exit(1);
+            }
+        }
     }
 
     Ok(())

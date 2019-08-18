@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::result;
 use std::path::Path;
 use std::io;
@@ -14,6 +15,8 @@ pub enum KvStoreError {
     Io(io::Error),
     EncoderError(bson::EncoderError),
     DecoderError(bson::DecoderError),
+    NonExistentKeyError(String),
+    SerializationError(String),
 }
 
 impl From<io::Error> for KvStoreError {
@@ -46,6 +49,8 @@ impl Error for KvStoreError {
             KvStoreError::Io(err) => err.description(),
             KvStoreError::EncoderError(err) => err.description(),
             KvStoreError::DecoderError(err) => err.description(),
+            KvStoreError::NonExistentKeyError(string) => string,
+            KvStoreError::SerializationError(string) => string,
         }
     }
 
@@ -54,6 +59,8 @@ impl Error for KvStoreError {
             KvStoreError::Io(err) => Some(err),
             KvStoreError::EncoderError(err) => Some(err),
             KvStoreError::DecoderError(err) => Some(err),
+            KvStoreError::NonExistentKeyError(_) => None,
+            KvStoreError::SerializationError(_) => None,
         }
     }
 }
@@ -79,14 +86,24 @@ pub struct KvStore {
 }
 
 impl KvStore {
-    /// Create a new KvStore
+    /// Open a directory for use as KvStore backing
     /// ```rust
     /// extern crate kvs;
     /// use kvs::KvStore;
+    /// use std::path::Path;
+    /// use tempfile::TempDir;
+    /// # use std::error::Error;
+    /// #
+    /// # fn main() -> Result<(), Box<Error>> {
+    /// let temp_dir = TempDir::new()?;
+    /// let mut store = KvStore::open(temp_dir.path())?;
+    /// #
+    /// # Ok(())
+    /// # }
     /// ```
-    /// Open a file for use as KvStore backing
-    pub fn open(path: &Path) -> Result<Self> {
-        let mut file = OpenOptions::new().read(true).create(true).append(true).open(path)?;
+    pub fn open(dirpath: &Path) -> Result<Self> {
+        let path = dirpath.join("data.log");
+        let file = OpenOptions::new().read(true).create(true).append(true).open(path)?;
 
         let mut log_index: HashMap<String, u64> = HashMap::new();
 
@@ -98,7 +115,7 @@ impl KvStore {
 
             let record: Record = bson::from_bson(bson_doc)?;
             match record {
-                Record::Set(key, value) => {
+                Record::Set(key, _value) => {
                     log_index.insert(key, file_pointer_location);
                 },
                 Record::Delete(key) => {
@@ -108,9 +125,8 @@ impl KvStore {
             file_pointer_location = reader.seek(SeekFrom::Current(0))?;
         }
 
-        let mut writer = BufWriter::new(file.try_clone()?);
-        // TODO: do we want to have a BufReader and a BufWriter for our kvstore instead of a file
-        // handle?
+        let writer = BufWriter::new(file.try_clone()?);
+
         Ok(Self {
             file,
             log_index,
@@ -123,7 +139,19 @@ impl KvStore {
     /// ```rust
     /// extern crate kvs;
     /// use kvs::KvStore;
-    /// let mut store = KvStore::new();
+    /// use std::path::Path;
+    /// use tempfile::TempDir;
+    /// # use std::error::Error;
+    /// #
+    /// # fn main() -> Result<(), Box<Error>> {
+    /// let temp_dir = TempDir::new()?;
+    /// let mut store = KvStore::open(temp_dir.path())?;
+    /// store.set("key".to_owned(), "value".to_owned())?;
+    /// let val = store.get("key".to_owned())?;
+    /// assert_eq!(val, Some("value".to_owned()));
+    /// #
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
         let record_log_location = self.log_index.get(&key);
@@ -137,8 +165,7 @@ impl KvStore {
 
                 let record: Record = bson::from_bson(bson_doc)?;
                 match record {
-                    Record::Set(key, value) => {
-                        println!("found value: {} for key: {}", &value, &key);
+                    Record::Set(_, value) => {
                         Ok(Some(value))
                     },
                     Record::Delete(_) => {
@@ -153,44 +180,67 @@ impl KvStore {
     /// ```rust
     /// extern crate kvs;
     /// use kvs::KvStore;
+    /// use std::path::Path;
+    /// use tempfile::TempDir;
+    /// # use std::error::Error;
+    /// #
+    /// # fn main() -> Result<(), Box<Error>> {
+    /// let temp_dir = TempDir::new()?;
+    /// let mut store = KvStore::open(temp_dir.path())?;
+    /// store.set("key".to_owned(), "value".to_owned())?;
+    /// #
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         let record = Record::Set(key, value);
         let new_record_location = self.writer.seek(SeekFrom::End(0))?;
 
         self.serialize_and_write(&record)?;
-        if let Record::Set(key, value) = record {
+        if let Record::Set(key, _value) = record {
             self.log_index.insert(key, new_record_location);
-            return Ok(())
+            return Ok(());
         }
 
-        // TODO: probably want to Error or something here because this should not actually
-        // ever occur
-        Ok(())
+        Err(KvStoreError::SerializationError("Error serializing record".to_owned()))
     }
 
     /// Remove a String key
     /// ```rust
     /// extern crate kvs;
     /// use kvs::KvStore;
-    /// let mut store = KvStore::new();
-    /// store.set(String::from("key"), String::from("value"));
-    /// store.remove(String::from("key"))
+    /// use std::path::Path;
+    /// use tempfile::TempDir;
+    /// # use std::error::Error;
+    /// #
+    /// # fn main() -> Result<(), Box<Error>> {
+    /// let temp_dir = TempDir::new()?;
+    /// let mut store = KvStore::open(temp_dir.path())?;
+    /// store.set("key".to_owned(), "value".to_owned())?;
+    /// store.remove("key".to_owned());
+    /// let val = store.get("key".to_owned())?;
+    /// assert_eq!(val, None);
+    /// #
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn remove(&mut self, key: String) -> Result<()> {
-        let record = Record::Delete(key);
+        let mut record_option = None;
 
-        self.serialize_and_write(&record)?;
+        match self.log_index.entry(key) {
+            Entry::Vacant(_) => {
+                return Err(KvStoreError::NonExistentKeyError("Key not in store".to_owned()));
+            },
+            Entry::Occupied(o) => {
+                record_option = Some(Record::Delete(o.key().to_string()));
+                o.remove_entry();
+            }
+        };
 
-        // The reason to use this weirdish if let is to pull the key value
-        // back out from the record without cloning anywhere...
-        if let Record::Delete(key) = record {
-            self.log_index.remove(&key);
-            return Ok(())
+        if let Some(record) = record_option {
+            self.serialize_and_write(&record)?;
         }
 
-        // TODO: probably want to Error or something here because this should not actually
-        // ever occur
         Ok(())
     }
 
@@ -198,10 +248,14 @@ impl KvStore {
     fn serialize_and_write(&mut self, record: &Record) -> Result<()> {
         let serialized_record = bson::to_bson(record)?;
         // TODO: probably should error here if it doesn't properly parse the document thing??
+        // And/or I should just be manually creating a bson document so I don't need that
+        // to_bson call??
         if let Some(document) = serialized_record.as_document() {
             bson::encode_document(&mut self.writer, document)?;
+            self.writer.flush()?;
+            return Ok(());
         }
 
-        Ok(())
+        Err(KvStoreError::SerializationError("Error serializing record".to_owned()))
     }
 }
