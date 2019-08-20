@@ -2,11 +2,8 @@
 
 //! A Key Value Store!
 
-extern crate serde;
-
-#[macro_use(bson, doc)]
-extern crate bson;
-
-pub use kv::{KvStore, Result};
+pub use kv::{KvStore};
+pub use errors::{Result};
 
 mod kv;
+mod errors;
