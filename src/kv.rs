@@ -18,24 +18,25 @@ enum Record {
 /// A type for reading, writing to, and tracking log files
 #[derive(Debug)]
 struct LogFile {
-    index: usize,
     path: PathBuf,
     file: File,
     reader: BufReader<File>,
     writer: BufWriter<File>,
 }
 
-/// A mapping between a key and a (file collection index, file location) tuple
-type LogFileIndexMap = HashMap<String, (usize, u64)>;
+/// A mapping between a key and a (file log path, file location) tuple
+type LogFileIndexMap = HashMap<String, (PathBuf, u64)>;
 
 /// A Key Store mapping string keys to
 /// string values
 #[derive(Debug)]
 pub struct KvStore {
     log_index: LogFileIndexMap,
-    log_files: Vec<LogFile>,
+    log_files: HashMap<PathBuf, LogFile>,
     dirpath: PathBuf,
-    compaction_index: usize,
+    active_log_path: Option<PathBuf>,
+    log_file_paths: Vec<PathBuf>,
+    log_file_counter: usize,
 }
 
 impl KvStore {
@@ -56,28 +57,28 @@ impl KvStore {
     /// ```
     pub fn open(dirpath: &Path) -> Result<Self> {
         let mut log_index: LogFileIndexMap = HashMap::new();
-        let mut log_files: Vec<LogFile> = Vec::new();
+        let mut log_files: HashMap<PathBuf, LogFile> = HashMap::new();
 
-        let mut log_file_index = 0;
-
+        println!("opening path: {:?}", &dirpath);
         let mut paths: Vec<_> = fs::read_dir(dirpath)?
                                                       .filter_map(|r| r.ok())
                                                       .collect();
         paths.sort_by_key(|dir| dir.metadata().unwrap().modified().unwrap());
 
-        for path in paths {
-            println!("path = {:?}", &path);
+        let mut last_path = None;
+
+        for path in &paths {
             let file = OpenOptions::new()
                 .read(true)
                 .create(true)
                 .append(true)
                 .open(&path.path())?;
 
+            println!("opened file = {:?}", &file);
             let reader = BufReader::new(file.try_clone()?);
             let writer = BufWriter::new(file.try_clone()?);
 
             let mut log_file = LogFile {
-                index: log_file_index,
                 reader,
                 writer,
                 file,
@@ -92,7 +93,7 @@ impl KvStore {
                 let record: Record = bson::from_bson(bson_doc)?;
                 match record {
                     Record::Set(key, _value) => {
-                        log_index.insert(key, (log_file_index, file_pointer_location));
+                        log_index.insert(key, (PathBuf::from(path.path()), file_pointer_location));
                     }
                     Record::Delete(key) => {
                         log_index.remove(&key);
@@ -101,15 +102,20 @@ impl KvStore {
                 file_pointer_location = log_file.reader.seek(SeekFrom::Current(0))?;
             }
 
-            log_files.push(log_file);
-            log_file_index = log_file_index + 1;
+            last_path = Some(path.path());
+            log_files.insert(path.path(), log_file);
         }
+
+        let log_file_paths = paths.into_iter().map(|d| d.path()).collect();
+        let log_file_counter = log_files.len();
 
         Ok(Self {
             log_index,
             log_files,
             dirpath: dirpath.to_path_buf(),
-            compaction_index: 0,
+            active_log_path: last_path,
+            log_file_paths,
+            log_file_counter,
         })
     }
 
@@ -133,12 +139,12 @@ impl KvStore {
     /// ```
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
         let record_log_location = self.log_index.get(&key);
-        println!("record_log_location = {:?}", &record_log_location);
 
         match record_log_location {
             None => Ok(None),
-            Some((file_log_index, location)) => {
-                let file_log = &mut self.log_files[*file_log_index];
+            Some((file_log_path, location)) => {
+                // TODO: fix unwrap!
+                let file_log = self.log_files.get_mut(file_log_path).unwrap();
                 file_log.reader.seek(SeekFrom::Start(*location))?;
                 let decoded = bson::decode_document(&mut file_log.reader)?;
                 let bson_doc = bson::Bson::Document(decoded);
@@ -170,11 +176,9 @@ impl KvStore {
     /// ```
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         let record = Record::Set(key, value);
-        println!("record = {:?}", &record);
 
         let new_record_location = self.serialize_and_write(&record)?;
         if let Record::Set(key, _value) = record {
-            println!("setting key: {}, to location: {:?}", &key, &new_record_location);
             self.log_index.insert(key, new_record_location);
             return Ok(());
         }
@@ -227,7 +231,8 @@ impl KvStore {
 
     /// Open a new log file for writing to
     fn open_new_log_file(&mut self) -> Result<()> {
-        let new_log_path: PathBuf = [self.dirpath.clone(), PathBuf::from(format!("{}.log", self.log_files.len()))].iter().collect();
+        self.log_file_counter = self.log_file_counter + 1;
+        let new_log_path: PathBuf = [self.dirpath.clone(), PathBuf::from(format!("{}.log", self.log_file_counter))].iter().collect();
 
         let file = OpenOptions::new()
             .read(true)
@@ -235,33 +240,35 @@ impl KvStore {
             .append(true)
             .open(&new_log_path)?;
 
+        println!("opened new log file = {:?}", &file);
+
         let reader = BufReader::new(file.try_clone()?);
         let writer = BufWriter::new(file.try_clone()?);
-        let log_file_index = self.log_files.len();
 
-        self.log_files.push(LogFile {
-            index: log_file_index,
-            reader,
-            writer,
-            file,
-            path: new_log_path,
-        });
+        self.log_files.insert(
+            new_log_path.clone(),
+            LogFile {
+                reader,
+                writer,
+                file,
+                path: new_log_path.clone(),
+            }
+        );
+
+        self.log_file_paths.push(new_log_path.clone());
+        self.active_log_path = Some(new_log_path);
 
         Ok(())
     }
 
     /// Compact oldest log entry
     fn compact(&mut self) -> Result<()> {
-        println!("ever gets to compaction???");
-        let log_file = self.log_files.get(self.compaction_index);
+        let mut key_to_remove = None;
 
-        println!("log_file = {:?}", &log_file);
-        match log_file {
-            None => {
-                return Ok(());
-            },
-            Some(log_file) => {
-                let log_file_index = log_file.index;
+        if let Some(path_to_remove) = &self.log_file_paths.first() {
+            let log_file = self.log_files.get_mut(path_to_remove.clone());
+
+            if let Some(log_file) = log_file {
                 let log_file_path = log_file.path.clone();
                 let mut reader = BufReader::new(log_file.file.try_clone()?);
                 reader.seek(SeekFrom::Start(0))?;
@@ -270,31 +277,28 @@ impl KvStore {
                     let bson_doc = bson::Bson::Document(decoded);
 
                     let record: Record = bson::from_bson(bson_doc)?;
-                    match record {
-                        Record::Set(key, record_value) => {
-                            let record_log_location = self.log_index.get(&key);
 
-                            match record_log_location {
-                                None => {},
-                                Some((idx, location)) => {
-                                    println!("idx = {}, log_file_index = {}", &idx, &log_file_index);
-                                    if idx == &log_file_index {
-                                        println!("setting a new value from compaction");
-                                        self.set(key, record_value)?;
-                                    }
-                                }
+                    if let Record::Set(key, record_value) = record {
+                        let record_log_location = self.log_index.get(&key);
+
+                        if let Some((path, _location)) = record_log_location {
+                            if path == &log_file_path {
+                                self.set(key, record_value)?;
                             }
                         }
-                        Record::Delete(_key) => {}
-                    };
+                    }
                 }
 
-                println!("removing file {:?}", &log_file_path);
-                fs::remove_file(&log_file_path)?;
+                key_to_remove = Some(log_file_path);
             }
-        };
+        }
 
-        self.compaction_index = self.compaction_index + 1;
+        if let Some(path) = key_to_remove {
+            println!("removing file: {:?}", &path);
+            self.log_files.remove(&path);
+            fs::remove_file(&path)?;
+            self.log_file_paths.retain(|x| x != &path);
+        }
 
         Ok(())
     }
@@ -302,30 +306,37 @@ impl KvStore {
     /// Get the active log file, potentially opening a new one
     /// for writing to
     fn setup_active_log_file(&mut self) -> Result<()> {
-        let active_log = self.log_files.last_mut();
-        match active_log {
-            None => {
-                self.open_new_log_file()?;
-            },
-            Some(log_file) => {
+        if let Some(active_log_path) = &self.active_log_path {
+            let active_log = self.log_files.get(active_log_path);
+            if let Some(log_file) = active_log {
                 // If log_file length is greater than max file size, make new file
-                if log_file.file.metadata()?.len() > 204800 {
+                if log_file.file.metadata()?.len() > 40480 {
+                    println!("log file length greater than max file size");
                     self.open_new_log_file()?;
+                } else {
+                    println!("log file smaller than max file size");
                 }
+            } else {
+                panic!("cant find active_log_path in self.log_files");
             }
-        };
+        } else {
+            println!("cant find active log path");
+            self.open_new_log_file()?;
+        }
+
+        println!("after open_new_log_file, active_log_path = {:?}", &self.active_log_path);
 
         Ok(())
     }
 
     /// Serialize and write to log file
     /// Returns the location of the record that was written
-    /// as a (log_file_index, location_in_file) tuple
-    fn serialize_and_write(&mut self, record: &Record) -> Result<(usize, u64)> {
+    /// as a (log_file_path, location_in_file) tuple
+    fn serialize_and_write(&mut self, record: &Record) -> Result<(PathBuf, u64)> {
         self.setup_active_log_file()?;
-        // setup_active_log_file always ensures that there will be at least
-        // one log_file in the log_files vector
-        let log_file = self.log_files.last_mut().unwrap();
+        // TODO: fix unwrap()
+        let active_log_path = self.active_log_path.clone().unwrap();
+        let log_file = self.log_files.get_mut(&active_log_path).unwrap();
 
         let new_record_location = log_file.writer.seek(SeekFrom::End(0))?;
 
@@ -337,11 +348,11 @@ impl KvStore {
             bson::encode_document(&mut log_file.writer, document)?;
             log_file.writer.flush()?;
 
-            if self.log_files.len() - self.compaction_index > 10 {
+            if self.log_files.len() > 3 {
                 self.compact()?;
             }
 
-            return Ok((self.log_files.len() - 1, new_record_location));
+            return Ok((active_log_path, new_record_location));
         }
 
         Err(KvStoreError::SerializationError(
