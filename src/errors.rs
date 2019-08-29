@@ -1,7 +1,7 @@
-use std::result;
 use std::error::Error;
 use std::fmt;
 use std::io;
+use std::result;
 
 #[derive(Debug)]
 pub enum KvStoreError {

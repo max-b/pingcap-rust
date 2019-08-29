@@ -2,8 +2,8 @@
 
 //! A Key Value Store!
 
-pub use kv::{KvStore};
-pub use errors::{Result};
+pub use errors::Result;
+pub use kv::KvStore;
 
-mod kv;
 mod errors;
+mod kv;

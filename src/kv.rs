@@ -1,3 +1,4 @@
+use crate::errors::{KvStoreError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -6,7 +7,6 @@ use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{BufReader, BufWriter, SeekFrom};
 use std::path::{Path, PathBuf};
-use crate::errors::{KvStoreError, Result};
 
 /// An enum which defines records
 #[derive(Serialize, Deserialize, Debug)]
@@ -67,18 +67,14 @@ impl KvStore {
         let mut log_index: LogFileIndexMap = HashMap::new();
         let mut log_file_readers: HashMap<PathBuf, LogFileReader> = HashMap::new();
 
-        let mut paths: Vec<_> = fs::read_dir(dirpath)?
-                                                      .filter_map(|r| r.ok())
-                                                      .collect();
+        let mut paths: Vec<_> = fs::read_dir(dirpath)?.filter_map(|r| r.ok()).collect();
         paths.sort_by_key(|dir| dir.metadata().unwrap().modified().unwrap());
 
         let mut last_path = None;
         let mut bytes_for_compaction = 0;
 
         for path in &paths {
-            let file = OpenOptions::new()
-                .read(true)
-                .open(&path.path())?;
+            let file = OpenOptions::new().read(true).open(&path.path())?;
 
             let reader = BufReader::new(file);
 
@@ -97,7 +93,14 @@ impl KvStore {
                 let record: Record = bson::from_bson(bson_doc)?;
                 match record {
                     Record::Set(key, _value) => {
-                        if let Some(prev) = log_index.insert(key, (PathBuf::from(path.path()), file_pointer_location, record_size)) {
+                        if let Some(prev) = log_index.insert(
+                            key,
+                            (
+                                PathBuf::from(path.path()),
+                                file_pointer_location,
+                                record_size,
+                            ),
+                        ) {
                             let (_, _, prev_record_size) = prev;
                             bytes_for_compaction = bytes_for_compaction + prev_record_size;
                         }
@@ -119,16 +122,18 @@ impl KvStore {
         let active_log_path = if let Some(path) = last_path {
             path
         } else {
-            let path: PathBuf = [dirpath.clone(), &PathBuf::from(format!("{}.log", 0))].iter().collect();
+            let path: PathBuf = [dirpath.clone(), &PathBuf::from(format!("{}.log", 0))]
+                .iter()
+                .collect();
             log_file_paths.push(path.clone());
             path
         };
 
         let active_log_file = OpenOptions::new()
-                .create(true)
-                .read(true)
-                .append(true)
-                .open(&active_log_path)?;
+            .create(true)
+            .read(true)
+            .append(true)
+            .open(&active_log_path)?;
 
         let writer = BufWriter::new(active_log_file.try_clone()?);
         let reader = BufReader::new(active_log_file.try_clone()?);
@@ -136,12 +141,12 @@ impl KvStore {
         let active_log = LogFileWriter {
             file: active_log_file,
             writer,
-            path: active_log_path.clone()
+            path: active_log_path.clone(),
         };
 
         let active_log_reader = LogFileReader {
             reader,
-            path: active_log_path.clone()
+            path: active_log_path.clone(),
         };
 
         log_file_readers.insert(active_log_path.clone(), active_log_reader);
@@ -276,7 +281,12 @@ impl KvStore {
     /// Open a new log file for writing to
     fn open_new_log_file(&mut self) -> Result<()> {
         self.log_file_counter = self.log_file_counter + 1;
-        let new_log_path: PathBuf = [self.dirpath.clone(), PathBuf::from(format!("{}.log", self.log_file_counter))].iter().collect();
+        let new_log_path: PathBuf = [
+            self.dirpath.clone(),
+            PathBuf::from(format!("{}.log", self.log_file_counter)),
+        ]
+        .iter()
+        .collect();
 
         let file = OpenOptions::new()
             .read(true)
@@ -291,7 +301,7 @@ impl KvStore {
             LogFileReader {
                 reader,
                 path: new_log_path.clone(),
-            }
+            },
         );
 
         let writer = BufWriter::new(file.try_clone()?);
@@ -308,18 +318,14 @@ impl KvStore {
 
     /// Compact oldest log entry
     fn compact(&mut self) -> Result<()> {
-
         if self.bytes_for_compaction <= 20480 {
             return Ok(());
         }
 
         while self.log_file_paths.len() > 1 {
-
             let mut key_to_remove = None;
             if let Some(path_to_remove) = &self.log_file_paths.first().cloned() {
-                let file = OpenOptions::new()
-                    .read(true)
-                    .open(&path_to_remove)?;
+                let file = OpenOptions::new().read(true).open(&path_to_remove)?;
 
                 let mut reader = BufReader::new(file);
                 let mut current_record_location = reader.seek(SeekFrom::Start(0))?;
@@ -384,7 +390,11 @@ impl KvStore {
             let record_size = record_location_end - record_location_start;
             self.active_log.writer.flush()?;
 
-            return Ok((self.active_log.path.clone(), record_location_start, record_size));
+            return Ok((
+                self.active_log.path.clone(),
+                record_location_start,
+                record_size,
+            ));
         }
 
         Err(KvStoreError::SerializationError(
