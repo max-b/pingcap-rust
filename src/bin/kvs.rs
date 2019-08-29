@@ -2,7 +2,6 @@ extern crate clap;
 extern crate kvs;
 
 use std::io;
-use std::io::prelude::*;
 use std::path::Path;
 use std::process;
 

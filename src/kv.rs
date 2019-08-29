@@ -83,7 +83,7 @@ impl KvStore {
 
             let mut log_file = LogFileReader {
                 reader,
-                path: PathBuf::from(path.path()),
+                path: path.path(),
             };
 
             let mut file_pointer_location = log_file.reader.seek(SeekFrom::Start(0))?;
@@ -99,13 +99,13 @@ impl KvStore {
                         if let Some(prev) = log_index.insert(
                             key,
                             (
-                                PathBuf::from(path.path()),
+                                path.path(),
                                 file_pointer_location,
                                 record_size,
                             ),
                         ) {
                             let (_, _, prev_record_size) = prev;
-                            bytes_for_compaction = bytes_for_compaction + prev_record_size;
+                            bytes_for_compaction += prev_record_size;
                         }
                     }
                     Record::Delete(key) => {
@@ -125,7 +125,7 @@ impl KvStore {
         let active_log_path = if let Some(path) = last_path {
             path
         } else {
-            let path: PathBuf = [dirpath.clone(), &PathBuf::from(format!("{}.log", 0))]
+            let path: PathBuf = [dirpath, &PathBuf::from(format!("{}.log", 0))]
                 .iter()
                 .collect();
             log_file_paths.push(path.clone());
@@ -223,11 +223,10 @@ impl KvStore {
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         let record = Record::Set(key.clone(), value.clone());
 
-        // TODO replace unwrap w/ ?
         let new_record_location = self.serialize_and_write(&record)?;
         if let Some(prev) = self.log_index.insert(key, new_record_location.clone()) {
             let (_, _, record_size) = prev;
-            self.bytes_for_compaction = self.bytes_for_compaction + record_size;
+            self.bytes_for_compaction += record_size;
         }
 
         self.compact()?;
@@ -267,7 +266,7 @@ impl KvStore {
                 record_option = Some(Record::Delete(o.key().to_string()));
                 let previous_record = o.get();
                 let (_, _, record_size) = previous_record;
-                self.bytes_for_compaction = self.bytes_for_compaction + record_size;
+                self.bytes_for_compaction += record_size;
                 o.remove_entry();
             }
         };
@@ -283,7 +282,7 @@ impl KvStore {
 
     /// Open a new log file for writing to
     fn open_new_log_file(&mut self) -> Result<()> {
-        self.log_file_counter = self.log_file_counter + 1;
+        self.log_file_counter += 1;
         let new_log_path: PathBuf = [
             self.dirpath.clone(),
             PathBuf::from(format!("{}.log", self.log_file_counter)),
