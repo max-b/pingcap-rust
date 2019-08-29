@@ -47,6 +47,9 @@ pub struct KvStore {
     bytes_for_compaction: u64,
 }
 
+static COMPACT_AFTER_BYTE_SIZE: u64 = 2048;
+static MAX_FILE_SIZE: u64 = 2048;
+
 impl KvStore {
     /// Open a directory for use as KvStore backing
     /// ```rust
@@ -318,47 +321,52 @@ impl KvStore {
 
     /// Compact oldest log entry
     fn compact(&mut self) -> Result<()> {
-        if self.bytes_for_compaction <= 20480 {
+        if self.bytes_for_compaction <= COMPACT_AFTER_BYTE_SIZE {
             return Ok(());
         }
 
-        while self.log_file_paths.len() > 1 {
-            let mut key_to_remove = None;
-            if let Some(path_to_remove) = &self.log_file_paths.first().cloned() {
-                let file = OpenOptions::new().read(true).open(&path_to_remove)?;
-
-                let mut reader = BufReader::new(file);
-                let mut current_record_location = reader.seek(SeekFrom::Start(0))?;
-
-                while let Ok(decoded) = bson::decode_document(&mut reader) {
-                    let bson_doc = bson::Bson::Document(decoded);
-
-                    let record: Record = bson::from_bson(bson_doc)?;
-
-                    if let Record::Set(key, record_value) = record {
-                        let record_log_location = self.log_index.get(&key);
-
-                        if let Some((path, location, _record_size)) = record_log_location {
-                            if path == path_to_remove && *location == current_record_location {
-                                // TODO: replace w/ ?
-                                let record = Record::Set(key, record_value);
-                                self.serialize_and_write(&record)?;
-                            }
-                        }
-                    }
-                    current_record_location = reader.seek(SeekFrom::Current(0))?;
-                }
-                key_to_remove = Some(path_to_remove.clone());
-            }
-
-            if let Some(path) = key_to_remove {
-                self.log_file_readers.remove(&path);
-                fs::remove_file(&path)?;
-                self.log_file_paths.retain(|x| x != &path);
-            }
+        if self.log_file_paths.len() <= 1 {
+            return Ok(());
         }
 
-        self.bytes_for_compaction = 0;
+        let mut key_to_remove = None;
+        if let Some(path_to_remove) = &self.log_file_paths.first().cloned() {
+            let file = OpenOptions::new().read(true).open(&path_to_remove)?;
+
+            let mut reader = BufReader::new(file);
+            let mut current_record_location = reader.seek(SeekFrom::Start(0))?;
+
+            while let Ok(decoded) = bson::decode_document(&mut reader) {
+                let bson_doc = bson::Bson::Document(decoded);
+
+                let record: Record = bson::from_bson(bson_doc)?;
+
+                if let Record::Set(key, record_value) = record {
+                    let record_log_location = self.log_index.get(&key);
+
+                    if let Some((path, location, record_size)) = record_log_location {
+                        if path == path_to_remove && *location == current_record_location {
+                            let record = Record::Set(key.clone(), record_value);
+                            let new_record_location = self.serialize_and_write(&record)?;
+                            self.log_index.insert(key.clone(), new_record_location);
+                        } else {
+                            self.bytes_for_compaction = match self.bytes_for_compaction.checked_sub(*record_size) {
+                                Some(b) => b,
+                                None => 0
+                            };
+                        }
+                    }
+                }
+                current_record_location = reader.seek(SeekFrom::Current(0))?;
+            }
+            key_to_remove = Some(path_to_remove.clone());
+        }
+
+        if let Some(path) = key_to_remove {
+            self.log_file_readers.remove(&path);
+            fs::remove_file(&path)?;
+            self.log_file_paths.retain(|x| x != &path);
+        }
 
         Ok(())
     }
@@ -366,7 +374,7 @@ impl KvStore {
     /// Get the active log file, potentially opening a new one
     /// for writing to
     fn setup_active_log_file(&mut self) -> Result<()> {
-        if self.active_log.file.metadata()?.len() > 140480 {
+        if self.active_log.file.metadata()?.len() > MAX_FILE_SIZE {
             self.open_new_log_file()?;
         }
         Ok(())
