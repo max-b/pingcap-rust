@@ -3,13 +3,12 @@ use crate::kv::KvsEngine;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::fs;
 use std::ffi;
+use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{BufReader, BufWriter, SeekFrom};
 use std::path::{Path, PathBuf};
-
 
 /// An enum which defines records
 #[derive(Serialize, Deserialize, Debug)]
@@ -144,9 +143,7 @@ impl KvsEngine for KvStore {
     /// ```
     fn remove(&mut self, key: String) -> Result<()> {
         match self.log_index.entry(key.clone()) {
-            Entry::Vacant(_) => {
-                Err(KvStoreError::NonExistentKeyError(key))
-            }
+            Entry::Vacant(_) => Err(KvStoreError::NonExistentKeyError(key)),
             Entry::Occupied(o) => {
                 let record = Record::Delete(o.key().to_string());
                 let previous_record = o.get();
@@ -212,14 +209,9 @@ impl KvStore {
                 let record: Record = bson::from_bson(bson_doc)?;
                 match record {
                     Record::Set(key, _value) => {
-                        if let Some(prev) = log_index.insert(
-                            key,
-                            (
-                                path.path(),
-                                file_pointer_location,
-                                record_size,
-                            ),
-                        ) {
+                        if let Some(prev) =
+                            log_index.insert(key, (path.path(), file_pointer_location, record_size))
+                        {
                             let (_, _, prev_record_size) = prev;
                             bytes_for_compaction += prev_record_size;
                         }
@@ -350,10 +342,11 @@ impl KvStore {
                             let new_record_location = self.serialize_and_write(&record)?;
                             self.log_index.insert(key.clone(), new_record_location);
                         } else {
-                            self.bytes_for_compaction = match self.bytes_for_compaction.checked_sub(*record_size) {
-                                Some(b) => b,
-                                None => 0
-                            };
+                            self.bytes_for_compaction =
+                                match self.bytes_for_compaction.checked_sub(*record_size) {
+                                    Some(b) => b,
+                                    None => 0,
+                                };
                         }
                     }
                 }

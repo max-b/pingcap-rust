@@ -1,4 +1,4 @@
-use crate::errors::{Result};
+use crate::errors::Result;
 
 /// A trait which defines the required methods to implement a pluggable
 /// storage backend for our key value server

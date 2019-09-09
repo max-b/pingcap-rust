@@ -1,20 +1,20 @@
 extern crate clap;
 extern crate kvs;
 
+use base64;
 use std::io;
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::process;
-use base64;
 
 use clap::{App, Arg, SubCommand};
 
 fn main() -> io::Result<()> {
     let addr_arg = Arg::with_name("addr")
-                .short("a")
-                .long("addr")
-                .help("address to connect to in IP:PORT format")
-                .takes_value(true);
+        .short("a")
+        .long("addr")
+        .help("address to connect to in IP:PORT format")
+        .takes_value(true);
 
     let matches = App::new("KvStore")
         .about("key value store")
@@ -69,17 +69,30 @@ fn main() -> io::Result<()> {
 
     let (addr, command) = if let Some(matches) = matches.subcommand_matches("get") {
         let addr = matches.value_of("addr").unwrap_or(default_addr);
-        (addr, format!("GET:{}", matches.value_of("key").unwrap().to_owned()))
+        (
+            addr,
+            format!("GET:{}", matches.value_of("key").unwrap().to_owned()),
+        )
     } else if let Some(matches) = matches.subcommand_matches("set") {
         let addr = matches.value_of("addr").unwrap_or(default_addr);
-        (addr, format!("SET:{}:{}", matches.value_of("key").unwrap().to_owned(), matches.value_of("value").unwrap().to_owned()))
+        (
+            addr,
+            format!(
+                "SET:{}:{}",
+                matches.value_of("key").unwrap().to_owned(),
+                matches.value_of("value").unwrap().to_owned()
+            ),
+        )
     } else if let Some(matches) = matches.subcommand_matches("rm") {
         let addr = matches.value_of("addr").unwrap_or(default_addr);
-        (addr, format!("REMOVE:{}", matches.value_of("key").unwrap().to_owned()))
+        (
+            addr,
+            format!("REMOVE:{}", matches.value_of("key").unwrap().to_owned()),
+        )
     } else {
         (default_addr, String::from("nope"))
     };
-    
+
     let mut stream = TcpStream::connect(addr)?;
     stream.write_all(command.as_bytes())?;
     stream.write_all(&b"\n".to_owned())?;
@@ -92,7 +105,8 @@ fn main() -> io::Result<()> {
     let success_string = sections.next();
 
     if let Some(success_string) = success_string {
-        let response = sections.next()
+        let response = sections
+            .next()
             .map(|v| String::from_utf8(base64::decode(v).unwrap()).unwrap())
             .unwrap_or_else(|| "Undefined response from server".to_owned());
         if success_string == "ERR" {

@@ -1,8 +1,8 @@
+use sled;
 use std::error::Error;
 use std::fmt;
 use std::io;
 use std::result;
-use sled;
 
 #[derive(Debug)]
 pub enum KvStoreError {

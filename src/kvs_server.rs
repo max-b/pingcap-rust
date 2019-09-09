@@ -1,11 +1,11 @@
-use std::net::{TcpListener};
-use std::io;
-use std::io::{BufReader, BufRead, Write};
-use slog::{Logger, info};
-use base64;
 use crate::kv::KvsEngine;
+use base64;
+use slog::{info, Logger};
+use std::io;
+use std::io::{BufRead, BufReader, Write};
+use std::net::TcpListener;
 
-/// A struct implementing a key value server with 
+/// A struct implementing a key value server with
 /// a pluggable db backend
 pub struct KvsServer {
     /// Address the server will listen on
@@ -13,7 +13,7 @@ pub struct KvsServer {
     /// Pluggable db backend
     store: Box<dyn KvsEngine>,
     /// Logger
-    logger: Logger
+    logger: Logger,
 }
 
 enum ServerResult {
@@ -56,13 +56,15 @@ impl KvsServer {
                     let result = self.store.get(key.to_owned());
                     result.map_or_else(
                         |_err| ServerResult::Err("Error getting value".to_owned()),
-                        |option| option.map_or_else(
-                            || ServerResult::Ok("NONE".to_owned()),
-                            |value| {
-                                info!(self.logger, "get result"; "value" => &value);
-                                ServerResult::Ok(value)
-                            }
-                        )
+                        |option| {
+                            option.map_or_else(
+                                || ServerResult::Ok("NONE".to_owned()),
+                                |value| {
+                                    info!(self.logger, "get result"; "value" => &value);
+                                    ServerResult::Ok(value)
+                                },
+                            )
+                        },
                     )
                 } else if command == "SET" {
                     let key = sections.next().unwrap();
@@ -71,7 +73,7 @@ impl KvsServer {
                     let result = self.store.set(key.to_owned(), value.to_owned());
                     result.map_or_else(
                         |_err| ServerResult::Err("Error setting key".to_owned()),
-                        |_| ServerResult::Ok("".to_owned())
+                        |_| ServerResult::Ok("".to_owned()),
                     )
                 } else if command == "REMOVE" {
                     let key = sections.next().unwrap();
@@ -79,7 +81,7 @@ impl KvsServer {
                     let result = self.store.remove(key.to_owned());
                     result.map_or_else(
                         |_err| ServerResult::Err("Key not found".to_owned()),
-                        |_| ServerResult::Ok("".to_owned())
+                        |_| ServerResult::Ok("".to_owned()),
                     )
                 } else {
                     ServerResult::Err("Command not recognized".to_owned())
@@ -92,7 +94,7 @@ impl KvsServer {
                 ServerResult::Ok(response) => {
                     stream.write_all(b"OK:")?;
                     stream.write_all(base64::encode(response.as_bytes()).as_bytes())?;
-                },
+                }
                 ServerResult::Err(response) => {
                     stream.write_all(b"ERR:")?;
                     stream.write_all(base64::encode(response.as_bytes()).as_bytes())?;
