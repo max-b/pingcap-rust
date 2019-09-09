@@ -12,6 +12,5 @@ pub use kvs_sled::SledKvsEngine;
 mod errors;
 mod kv;
 mod kv_store;
-mod kvs_client;
 mod kvs_server;
 mod kvs_sled;

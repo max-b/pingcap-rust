@@ -4,11 +4,8 @@ extern crate kvs;
 use std::io;
 use std::io::prelude::*;
 use std::net::TcpStream;
-use std::path::Path;
 use std::process;
 use base64;
-
-use kvs::KvStore;
 
 use clap::{App, Arg, SubCommand};
 
@@ -91,13 +88,13 @@ fn main() -> io::Result<()> {
     let mut incoming_string = String::new();
     stream.read_to_string(&mut incoming_string)?;
 
-    let mut sections = incoming_string.trim_end().split(":");
+    let mut sections = incoming_string.trim_end().split(':');
     let success_string = sections.next();
 
     if let Some(success_string) = success_string {
         let response = sections.next()
             .map(|v| String::from_utf8(base64::decode(v).unwrap()).unwrap())
-            .unwrap_or("Undefined response from server".to_owned());
+            .unwrap_or_else(|| "Undefined response from server".to_owned());
         if success_string == "ERR" {
             eprintln!("Error: {}", response);
             process::exit(1);

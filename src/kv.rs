@@ -1,6 +1,7 @@
-use crate::errors::{KvStoreError, Result};
+use crate::errors::{Result};
 
-/// TODO: document
+/// A trait which defines the required methods to implement a pluggable
+/// storage backend for our key value server
 pub trait KvsEngine {
     /// Set a key to a value
     fn set(&mut self, key: String, value: String) -> Result<()>;

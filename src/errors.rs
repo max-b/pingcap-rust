@@ -12,7 +12,6 @@ pub enum KvStoreError {
     SledError(sled::Error),
     NonExistentKeyError(String),
     SerializationError(String),
-    DatabaseInitializationError(String),
 }
 
 impl From<io::Error> for KvStoreError {
@@ -54,7 +53,6 @@ impl Error for KvStoreError {
             KvStoreError::SledError(err) => err.description(),
             KvStoreError::NonExistentKeyError(string) => string,
             KvStoreError::SerializationError(string) => string,
-            KvStoreError::DatabaseInitializationError(string) => string,
         }
     }
 
@@ -66,7 +64,6 @@ impl Error for KvStoreError {
             KvStoreError::SledError(err) => Some(err),
             KvStoreError::NonExistentKeyError(_) => None,
             KvStoreError::SerializationError(_) => None,
-            KvStoreError::DatabaseInitializationError(_) => None,
         }
     }
 }

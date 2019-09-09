@@ -1,18 +1,18 @@
-use std::path::{Path, PathBuf};
-use std::net::{TcpListener, TcpStream};
+use std::net::{TcpListener};
 use std::io;
-use std::io::{BufReader, BufRead, Read, Write};
+use std::io::{BufReader, BufRead, Write};
 use slog::{Logger, info};
 use base64;
 use crate::kv::KvsEngine;
 
-/// TODO: document this!
+/// A struct implementing a key value server with 
+/// a pluggable db backend
 pub struct KvsServer {
-    /// TODO: documentation
+    /// Address the server will listen on
     addr: String,
-    /// TODO: documentation
+    /// Pluggable db backend
     store: Box<dyn KvsEngine>,
-    /// TODO: documentation
+    /// Logger
     logger: Logger
 }
 
@@ -22,7 +22,8 @@ enum ServerResult {
 }
 
 impl KvsServer {
-    /// TODO: documentation
+    /// Create a new key value server listening on an address with
+    /// a pluggable storage db backend
     pub fn new(addr: String, store: Box<dyn KvsEngine>, logger: Logger) -> Self {
         Self {
             addr,
@@ -31,11 +32,10 @@ impl KvsServer {
         }
     }
 
-    /// TODO: document
+    /// Start the key value server listening for connections
     pub fn start(&mut self) -> io::Result<()> {
         let listener = TcpListener::bind(&self.addr)?;
 
-        // accept connections and process them serially
         for stream in listener.incoming() {
             let mut stream = stream?;
             let mut reader = BufReader::new(stream.try_clone()?);
@@ -45,7 +45,7 @@ impl KvsServer {
 
             info!(self.logger, "incoming"; "data" => &incoming_string);
 
-            let mut sections = incoming_string.trim_end().split(":");
+            let mut sections = incoming_string.trim_end().split(':');
 
             let command = sections.next();
             let store_response = if let Some(command) = command {
@@ -90,11 +90,11 @@ impl KvsServer {
 
             match store_response {
                 ServerResult::Ok(response) => {
-                    stream.write_all("OK:".as_bytes())?;
+                    stream.write_all(b"OK:")?;
                     stream.write_all(base64::encode(response.as_bytes()).as_bytes())?;
                 },
                 ServerResult::Err(response) => {
-                    stream.write_all("ERR:".as_bytes())?;
+                    stream.write_all(b"ERR:")?;
                     stream.write_all(base64::encode(response.as_bytes()).as_bytes())?;
                 }
             };

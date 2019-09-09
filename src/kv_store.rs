@@ -185,7 +185,7 @@ impl KvStore {
 
         let mut paths: Vec<_> = fs::read_dir(dirpath)?
             .filter_map(|r| r.ok())
-            .filter(|f| f.path().extension().unwrap_or(ffi::OsStr::new("")) == "log")
+            .filter(|f| f.path().extension().unwrap_or_else(|| ffi::OsStr::new("")) == "log")
             .collect();
         paths.sort_by_key(|f| f.metadata().unwrap().modified().unwrap());
 

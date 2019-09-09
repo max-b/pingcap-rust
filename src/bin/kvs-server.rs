@@ -8,7 +8,6 @@ extern crate kvs;
 
 use std::io;
 use std::path::Path;
-use std::process;
 use std::fs;
 
 use sloggers::Build;
@@ -19,8 +18,12 @@ use kvs::{KvStore, SledKvsEngine, KvsEngine, KvsServer};
 
 use clap::{App, Arg};
 
-fn get_engine(engine_path: &Path) -> Option<String> {
-    fs::read_to_string(engine_path).ok()
+fn get_engine(engine_path: &Path) -> io::Result<Option<String>> {
+    match fs::read_to_string(engine_path) {
+        Ok(e) => Ok(Some(e)),
+        Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e)
+    }
 }
 
 fn main() -> io::Result<()> {
@@ -59,20 +62,16 @@ fn main() -> io::Result<()> {
         )
         .get_matches();
 
-
     let data_path = Path::new(matches.value_of("data-path").unwrap_or("./"));
-    // TODO: check if previously persisted data
-    let engine_opt = matches.value_of("engine").unwrap_or("kvs");
-
     let addr = matches.value_of("addr").unwrap_or("127.0.0.1:4000").to_owned();
 
+    let engine_opt = matches.value_of("engine").unwrap_or("kvs");
     let engine_path = data_path.join("engine");
-    let prev_engine = get_engine(&engine_path).unwrap_or(engine_opt.to_owned()).to_owned();
+    let prev_engine = get_engine(&engine_path)?.unwrap_or_else(|| engine_opt.to_owned()).to_owned();
 
     info!(logger, "configuration"; "address" => &addr, "engine_opt" => engine_opt, "prev_engine" => &prev_engine, "data_path" => format!("{:?}", &data_path.canonicalize().unwrap()));
 
     if prev_engine != engine_opt {
-        info!(logger, "engine mismatch");
         error!(logger, "engine mismatch");
         return Err(io::Error::new(io::ErrorKind::Other, "engine mismatch".to_owned()));
     }
