@@ -3,11 +3,11 @@ use crate::kv::KvsEngine;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::{fmt, ffi, fs};
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{BufReader, BufWriter, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::{ffi, fmt, fs};
 
 /// An enum which defines records
 #[derive(Serialize, Deserialize, Debug)]
