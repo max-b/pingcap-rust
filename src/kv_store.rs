@@ -3,8 +3,7 @@ use crate::kv::KvsEngine;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::ffi;
-use std::fs;
+use std::{fmt, ffi, fs};
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{BufReader, BufWriter, SeekFrom};
@@ -50,8 +49,13 @@ pub struct KvStore {
 }
 
 static COMPACT_AFTER_BYTE_SIZE: u64 = 2048;
-static MAX_FILE_SIZE: u64 = 2048;
+static MAX_FILE_SIZE: u64 = 20480;
 
+impl fmt::Display for KvStore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({:?})", self.dirpath)
+    }
+}
 impl KvsEngine for KvStore {
     /// Get a String value from a String key
     /// ```rust
