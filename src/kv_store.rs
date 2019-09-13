@@ -51,6 +51,12 @@ pub struct KvStore {
 static COMPACT_AFTER_BYTE_SIZE: u64 = 2048;
 static MAX_FILE_SIZE: u64 = 20480;
 
+impl Clone for KvStore {
+    fn clone(&self) -> Self {
+        unimplemented!();
+    }
+}
+
 impl fmt::Display for KvStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({:?})", self.dirpath)

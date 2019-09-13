@@ -9,6 +9,9 @@ pub use kv_store::KvStore;
 pub use kvs_server::KvsServer;
 pub use kvs_sled::SledKvsEngine;
 
+/// TODO: documentation
+pub mod thread_pool;
+
 mod errors;
 mod kv;
 mod kv_store;

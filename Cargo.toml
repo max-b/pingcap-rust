@@ -23,6 +23,7 @@ harness = false
 
 [dependencies]
 clap = "2.32.0"
+crossbeam-utils = "0.6.6"
 base64 = "0.10.1"
 bson = "0.13"
 serde = "1.0.98"
@@ -38,3 +39,4 @@ predicates = "1.0.0"
 rand = "0.7.0"
 tempfile = "3.0.7"
 walkdir = "2.2.7"
+panic-control = "0.1.4"
