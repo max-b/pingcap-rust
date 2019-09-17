@@ -14,7 +14,7 @@ use sloggers::terminal::{Destination, TerminalLoggerBuilder};
 use sloggers::types::Severity;
 use sloggers::Build;
 
-use kvs::{KvStore, KvsEngine, KvsServer, SledKvsEngine};
+use kvs::{KvStore, KvsEngine, KvsServer, SledKvsEngine, ThreadPool, NaiveThreadPool};
 
 use clap::{App, Arg};
 
@@ -85,13 +85,20 @@ fn main() -> io::Result<()> {
 
     fs::write(&engine_path, engine_opt.as_bytes())?;
 
-    let store: Box<dyn KvsEngine> = if engine_opt == "kvs" {
-        Box::new(KvStore::open(data_path).expect("can't open KvStore"))
+    // NaiveThreadPool doesn't actually use a size
+    // TODO: unwrap
+    let thread_pool = NaiveThreadPool::new(99).unwrap();
+
+    // TODO: better else condition?
+    if engine_opt == "kvs" {
+        let store = KvStore::open(data_path).expect("can't open KvStore");
+        let mut server = KvsServer::new(addr, store, thread_pool, logger);
+        server.start()
+    } else if engine_opt == "sled" {
+        let store = SledKvsEngine::open(data_path).expect("can't open sled db");
+        let mut server = KvsServer::new(addr, store, thread_pool, logger);
+        server.start()
     } else {
-        Box::new(SledKvsEngine::open(data_path).expect("can't open sled db"))
-    };
-
-    let mut server = KvsServer::new(addr, store, logger);
-
-    server.start()
+        panic!("server_opt not properly specified");
+    }
 }

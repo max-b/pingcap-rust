@@ -36,7 +36,17 @@ pub fn kvs_set_benchmark(c: &mut Criterion) {
         .collect();
 
     let mut group = c.benchmark_group("set");
-    let set_value = |(mut store, _temp_dir): (Box<dyn KvsEngine>, TempDir)| {
+
+    // TODO: replace this repetition w/ macro?
+    let set_kv_store_value = |(mut store, _temp_dir): (KvStore, TempDir)| {
+        for (k, v) in &values {
+            store
+                .set(black_box(k.to_owned()), black_box(v.to_owned()))
+                .expect("KvStore set failed");
+        }
+    };
+
+    let set_sled_store_value = |(mut store, _temp_dir): (SledKvsEngine, TempDir)| {
         for (k, v) in &values {
             store
                 .set(black_box(k.to_owned()), black_box(v.to_owned()))
@@ -50,11 +60,11 @@ pub fn kvs_set_benchmark(c: &mut Criterion) {
                 let temp_dir =
                     TempDir::new().expect("unable to create temporary working directory");
                 let kv_store =
-                    Box::new(KvStore::open(temp_dir.path()).expect("can't open KvStore"));
+                    KvStore::open(temp_dir.path()).expect("can't open KvStore");
                 // Don't drop temp_dir so that it doesn't delete the dir
                 (kv_store, temp_dir)
             },
-            set_value,
+            set_kv_store_value,
             BatchSize::SmallInput,
         )
     });
@@ -65,11 +75,11 @@ pub fn kvs_set_benchmark(c: &mut Criterion) {
                 let temp_dir =
                     TempDir::new().expect("unable to create temporary working directory");
                 let sled_store =
-                    Box::new(SledKvsEngine::open(temp_dir.path()).expect("can't open sled db"));
+                    SledKvsEngine::open(temp_dir.path()).expect("can't open sled db");
                 // Don't drop temp_dir so that it doesn't delete the dir
                 (sled_store, temp_dir)
             },
-            set_value,
+            set_sled_store_value,
             BatchSize::SmallInput,
         )
     });
@@ -96,7 +106,9 @@ pub fn kvs_get_benchmark(c: &mut Criterion) {
         .collect();
 
     let mut group = c.benchmark_group("get");
-    let set_value = |mut store: Box<dyn KvsEngine>| {
+
+    // TODO: replace repetition w/ macro?
+    let set_kv_store_value = |mut store: KvStore| {
         for (k, v) in &values {
             store
                 .set(black_box(k.to_owned()), black_box(v.to_owned()))
@@ -105,7 +117,24 @@ pub fn kvs_get_benchmark(c: &mut Criterion) {
         store
     };
 
-    let get_value = |(mut store, _temp_dir): (Box<dyn KvsEngine>, TempDir)| {
+    let set_sled_store_value = |mut store: SledKvsEngine| {
+        for (k, v) in &values {
+            store
+                .set(black_box(k.to_owned()), black_box(v.to_owned()))
+                .expect("KvStore set failed");
+        }
+        store
+    };
+
+    let get_kv_store_value = |(mut store, _temp_dir): (KvStore, TempDir)| {
+        for (k, v) in &values {
+            store
+                .get(black_box(k.to_owned()))
+                .expect("failed to fetch key");
+        }
+    };
+
+    let get_sled_store_value = |(mut store, _temp_dir): (SledKvsEngine, TempDir)| {
         for (k, v) in &values {
             store
                 .get(black_box(k.to_owned()))
@@ -119,13 +148,13 @@ pub fn kvs_get_benchmark(c: &mut Criterion) {
                 let temp_dir =
                     TempDir::new().expect("unable to create temporary working directory");
                 let kv_store =
-                    Box::new(KvStore::open(temp_dir.path()).expect("can't open KvStore"));
+                    KvStore::open(temp_dir.path()).expect("can't open KvStore");
 
-                let kv_store = set_value(kv_store);
+                let kv_store = set_kv_store_value(kv_store);
                 // Don't drop temp_dir so that it doesn't delete the dir
                 (kv_store, temp_dir)
             },
-            get_value,
+            get_kv_store_value,
             BatchSize::SmallInput,
         )
     });
@@ -136,11 +165,11 @@ pub fn kvs_get_benchmark(c: &mut Criterion) {
                 let temp_dir =
                     TempDir::new().expect("unable to create temporary working directory");
                 let sled_store =
-                    Box::new(SledKvsEngine::open(temp_dir.path()).expect("can't open sled db"));
+                    SledKvsEngine::open(temp_dir.path()).expect("can't open sled db");
                 // Don't drop temp_dir so that it doesn't delete the dir
                 (sled_store, temp_dir)
             },
-            get_value,
+            get_sled_store_value,
             BatchSize::SmallInput,
         )
     });

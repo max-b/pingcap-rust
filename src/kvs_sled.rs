@@ -4,13 +4,14 @@ use sled::Db;
 use std::path::Path;
 
 /// A wrapper for the sled db which implements the KvsEngine trait
+#[derive(Clone, Debug)]
 pub struct SledKvsEngine {
     db: Db,
 }
 
 impl KvsEngine for SledKvsEngine {
     /// Get a key
-    fn get(&mut self, key: String) -> Result<Option<String>> {
+    fn get(&self, key: String) -> Result<Option<String>> {
         self.db
             .get(key.as_bytes())
             .map(|o| o.map(|v| String::from_utf8_lossy(&v).into_owned()))
@@ -18,20 +19,22 @@ impl KvsEngine for SledKvsEngine {
     }
 
     /// Set a key's value
-    fn set(&mut self, key: String, value: String) -> Result<()> {
+    fn set(&self, key: String, value: String) -> Result<()> {
         let result = self
             .db
             .insert(key.as_bytes(), value.as_bytes())
             .map(|_| ())
             .map_err(|_| KvStoreError::NonExistentKeyError(key));
-        self.db.flush()?;
+        // TODO: can we get away w/out flushing here? it's *terrible* for performance
+        // self.db.flush()?;
         result
     }
 
     /// Remove a key from the database
-    fn remove(&mut self, key: String) -> Result<()> {
+    fn remove(&self, key: String) -> Result<()> {
         let result = self.db.remove(key.as_bytes());
 
+        // TODO: can we get away w/out flushing here? it's *terrible* for performance
         self.db.flush()?;
         match result {
             Ok(o) => match o {

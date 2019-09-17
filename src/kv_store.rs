@@ -1,3 +1,4 @@
+use std::sync::{Arc, RwLock};
 use crate::errors::{KvStoreError, Result};
 use crate::kv::KvsEngine;
 use serde::{Deserialize, Serialize};
@@ -31,14 +32,14 @@ struct LogFileWriter {
     writer: BufWriter<File>,
 }
 
-// TODO: improve type naming here
-/// A mapping between a key and a (file log path, file location, record size) tuple
-type LogFileIndexMap = HashMap<String, (PathBuf, u64, u64)>;
+type RecordLocation = (PathBuf, u64, u64);
 
-/// A Key Store mapping string keys to
-/// string values
+/// A mapping between a key and a (file log path, file location, record size) tuple
+type LogFileIndexMap = HashMap<String, RecordLocation>;
+
+/// TODO: Documentation
 #[derive(Debug)]
-pub struct KvStore {
+pub struct SharedKvStore {
     log_index: LogFileIndexMap,
     log_file_readers: HashMap<PathBuf, LogFileReader>,
     active_log: LogFileWriter,
@@ -48,20 +49,27 @@ pub struct KvStore {
     bytes_for_compaction: u64,
 }
 
+/// TODO: documentationn
+#[derive(Clone, Debug)]
+pub struct KvStore(Arc<RwLock<SharedKvStore>>);
+
 static COMPACT_AFTER_BYTE_SIZE: u64 = 2048;
 static MAX_FILE_SIZE: u64 = 20480;
 
-impl Clone for KvStore {
-    fn clone(&self) -> Self {
-        unimplemented!();
-    }
-}
+// impl Clone for KvStore {
+//     fn clone(&self) -> Self {
+//         KvStore {
+//             data: self.data.clone
+//     }
+// }
 
 impl fmt::Display for KvStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({:?})", self.dirpath)
+        // TODO: unwrap
+        write!(f, "({:?})", self.0.read().unwrap().dirpath)
     }
 }
+
 impl KvsEngine for KvStore {
     /// Get a String value from a String key
     /// ```rust
@@ -73,7 +81,7 @@ impl KvsEngine for KvStore {
     /// #
     /// # fn main() -> Result<(), Box<Error>> {
     /// let temp_dir = TempDir::new()?;
-    /// let mut store = KvStore::open(temp_dir.path())?;
+    /// let store = KvStore::open(temp_dir.path())?;
     /// store.set("key".to_owned(), "value".to_owned())?;
     /// let val = store.get("key".to_owned())?;
     /// assert_eq!(val, Some("value".to_owned()));
@@ -81,15 +89,16 @@ impl KvsEngine for KvStore {
     /// # Ok(())
     /// # }
     /// ```
-    fn get(&mut self, key: String) -> Result<Option<String>> {
-        let record_log_location = self.log_index.get(&key);
+    fn get(&self, key: String) -> Result<Option<String>> {
+        let mut shared = self.0.write().map_err(|e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
+        let record_location = shared.log_index.get(&key).cloned();
 
-        match record_log_location {
+        match record_location {
             None => Ok(None),
             Some((log_file_path, location, _record_size)) => {
                 // TODO: fix unwrap!
-                let file_log = self.log_file_readers.get_mut(log_file_path).unwrap();
-                file_log.reader.seek(SeekFrom::Start(*location))?;
+                let file_log = shared.log_file_readers.get_mut(&log_file_path).unwrap();
+                file_log.reader.seek(SeekFrom::Start(location))?;
                 let decoded = bson::decode_document(&mut file_log.reader)?;
                 let bson_doc = bson::Bson::Document(decoded);
 
@@ -118,16 +127,17 @@ impl KvsEngine for KvStore {
     /// # Ok(())
     /// # }
     /// ```
-    fn set(&mut self, key: String, value: String) -> Result<()> {
+    fn set(&self, key: String, value: String) -> Result<()> {
         let record = Record::Set(key.clone(), value.clone());
+        let mut shared = self.0.write().map_err(|e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
+        let new_record_location = shared.serialize_and_write(&record)?;
 
-        let new_record_location = self.serialize_and_write(&record)?;
-        if let Some(prev) = self.log_index.insert(key, new_record_location.clone()) {
+        if let Some(prev) = shared.log_index.insert(key, new_record_location.clone()) {
             let (_, _, record_size) = prev;
-            self.bytes_for_compaction += record_size;
+            shared.bytes_for_compaction += record_size;
         }
 
-        self.compact()?;
+        shared.compact()?;
 
         Ok(())
     }
@@ -151,22 +161,30 @@ impl KvsEngine for KvStore {
     /// # Ok(())
     /// # }
     /// ```
-    fn remove(&mut self, key: String) -> Result<()> {
-        match self.log_index.entry(key.clone()) {
-            Entry::Vacant(_) => Err(KvStoreError::NonExistentKeyError(key)),
-            Entry::Occupied(o) => {
-                let record = Record::Delete(o.key().to_string());
-                let previous_record = o.get();
-                let (_, _, record_size) = previous_record;
-                self.bytes_for_compaction += record_size;
-                o.remove_entry();
+    fn remove(&self, key: String) -> Result<()> {
+        let mut shared = self.0.write().map_err(|e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
 
-                self.serialize_and_write(&record)?;
-                self.compact()?;
-
-                Ok(())
+        let (record, return_val, record_size) = {
+            match shared.log_index.entry(key.clone()) {
+                Entry::Vacant(_) => (None, Err(KvStoreError::NonExistentKeyError(key)), 0),
+                Entry::Occupied(o) => {
+                    let record = Record::Delete(o.key().to_string());
+                    let previous_record = o.get();
+                    let (_, _, record_size) = previous_record;
+                    let record_size = *record_size;
+                    o.remove_entry();
+                    (Some(record), Ok(()), record_size)
+                }
             }
+        };
+
+        if let Some(record) = record {
+            shared.serialize_and_write(&record)?;
+            shared.bytes_for_compaction += record_size;
+            shared.compact()?;
         }
+
+        return_val
     }
 }
 
@@ -272,7 +290,7 @@ impl KvStore {
 
         log_file_readers.insert(active_log_path.clone(), active_log_reader);
 
-        Ok(Self {
+        Ok(Self(Arc::new(RwLock::new(SharedKvStore {
             log_index,
             log_file_readers,
             active_log,
@@ -280,9 +298,11 @@ impl KvStore {
             log_file_paths,
             log_file_counter,
             bytes_for_compaction,
-        })
+        }))))
     }
+}
 
+impl SharedKvStore {
     /// Open a new log file for writing to
     fn open_new_log_file(&mut self) -> Result<()> {
         self.log_file_counter += 1;
@@ -377,7 +397,11 @@ impl KvStore {
     /// Get the active log file, potentially opening a new one
     /// for writing to
     fn setup_active_log_file(&mut self) -> Result<()> {
-        if self.active_log.file.metadata()?.len() > MAX_FILE_SIZE {
+        let active_log_file_len = {
+            self.active_log.file.metadata()?.len()
+        };
+
+        if active_log_file_len > MAX_FILE_SIZE {
             self.open_new_log_file()?;
         }
         Ok(())

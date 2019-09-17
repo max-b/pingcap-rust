@@ -8,6 +8,7 @@ pub use kv::KvsEngine;
 pub use kv_store::KvStore;
 pub use kvs_server::KvsServer;
 pub use kvs_sled::SledKvsEngine;
+pub use thread_pool::{ThreadPool, NaiveThreadPool};
 
 /// TODO: documentation
 pub mod thread_pool;
