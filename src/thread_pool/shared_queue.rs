@@ -1,6 +1,6 @@
 use std::iter;
 use std::thread;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use crossbeam::deque::{
     Injector as InjectorQueue, 
     Stealer,
@@ -20,7 +20,7 @@ enum Message {
 
 fn find_task(
     local: &WorkerQueue<BoxedFunc>,
-    shared_global: &Arc<Mutex<InjectorQueue<BoxedFunc>>>,
+    shared_global: &Arc<InjectorQueue<BoxedFunc>>,
     stealers: &[Stealer<BoxedFunc>],
 ) -> Option<BoxedFunc> {
     // Pop a task from the local queue, if not empty.
@@ -28,8 +28,7 @@ fn find_task(
         // Otherwise, we need to look for a task elsewhere.
         iter::repeat_with(|| {
             // Try stealing a batch of tasks from the global queue.
-            let global = shared_global.lock().expect("Error taking lock");
-            global.steal_batch_and_pop(local)
+            shared_global.steal_batch_and_pop(local)
                 // Or try stealing a task from one of the other threads.
                 .or_else(|| stealers.iter().map(|s| s.steal()).collect())
         })
@@ -44,13 +43,13 @@ fn find_task(
 struct Worker {
     receiver: Receiver<Message>,
     local: WorkerQueue<BoxedFunc>,
-    global: Arc<Mutex<InjectorQueue<BoxedFunc>>>,
+    global: Arc<InjectorQueue<BoxedFunc>>,
     stealers: Vec<Stealer<BoxedFunc>>,
     senders: Vec<Sender<Message>>
 }
 
 impl Worker {
-    pub fn new(receiver: Receiver<Message>, global: Arc<Mutex<InjectorQueue<BoxedFunc>>>) -> Self {
+    pub fn new(receiver: Receiver<Message>, global: Arc<InjectorQueue<BoxedFunc>>) -> Self {
         let local = WorkerQueue::<BoxedFunc>::new_fifo();
         let stealers: Vec<Stealer<BoxedFunc>> = Vec::new();
         let senders: Vec<Sender<Message>> = Vec::new();
@@ -135,7 +134,7 @@ impl Drop for Worker {
 
 /// TODO: Documentation
 pub struct SharedQueueThreadPool {
-    shared_injector: Arc<Mutex<InjectorQueue<BoxedFunc>>>,
+    shared_injector: Arc<InjectorQueue<BoxedFunc>>,
     senders: Vec<Sender<Message>>,
 }
 
@@ -152,7 +151,7 @@ impl ThreadPool for SharedQueueThreadPool {
         let mut stealers = Vec::new();
         let mut senders = Vec::new();
         let mut workers = Vec::new();
-        let shared_injector = Arc::new(Mutex::new(InjectorQueue::<BoxedFunc>::new()));
+        let shared_injector = Arc::new(InjectorQueue::<BoxedFunc>::new());
 
         for _i in 0..threads {
             let (sender, receiver) = unbounded();
@@ -178,7 +177,6 @@ impl ThreadPool for SharedQueueThreadPool {
     }
 
     fn spawn<T>(&self, job: T) where T: FnOnce() + Send + 'static {
-        let global = self.shared_injector.lock().expect("Error taking lock");
-        global.push(Box::new(job));
+        self.shared_injector.push(Box::new(job));
     }
 }
