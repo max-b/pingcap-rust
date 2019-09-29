@@ -6,7 +6,7 @@ use std::thread;
 pub struct NaiveThreadPool {}
 
 impl ThreadPool for NaiveThreadPool {
-    fn new(threads: u32) -> Result<Self> {
+    fn new(_threads: u32) -> Result<Self> {
         Ok(Self {})
     }
 
@@ -14,6 +14,6 @@ impl ThreadPool for NaiveThreadPool {
     where
         F: FnOnce() + Send + 'static,
     {
-        let handle = thread::spawn(job);
+        let _handle = thread::spawn(job);
     }
 }

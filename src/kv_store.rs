@@ -93,7 +93,7 @@ impl KvsEngine for KvStore {
         let mut shared = self
             .0
             .write()
-            .map_err(|e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
+            .map_err(|_e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
         let record_location = shared.log_index.get(&key).cloned();
 
         match record_location {
@@ -135,7 +135,7 @@ impl KvsEngine for KvStore {
         let mut shared = self
             .0
             .write()
-            .map_err(|e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
+            .map_err(|_e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
         let new_record_location = shared.serialize_and_write(&record)?;
 
         if let Some(prev) = shared.log_index.insert(key, new_record_location.clone()) {
@@ -171,7 +171,7 @@ impl KvsEngine for KvStore {
         let mut shared = self
             .0
             .write()
-            .map_err(|e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
+            .map_err(|_e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
 
         let (record, return_val, record_size) = {
             match shared.log_index.entry(key.clone()) {

@@ -6,19 +6,18 @@ extern crate sloggers;
 
 extern crate kvs;
 
+use std::convert::TryInto;
 use std::fs;
 use std::io;
 use std::path::Path;
-use std::convert::TryInto;
 
+use clap::{App, Arg};
+use num_cpus;
 use sloggers::terminal::{Destination, TerminalLoggerBuilder};
 use sloggers::types::Severity;
 use sloggers::Build;
-use clap::{App, Arg};
-use num_cpus;
 
 use kvs::{KvStore, KvsServer, RayonThreadPool, SharedQueueThreadPool, SledKvsEngine, ThreadPool};
-
 
 fn get_engine(engine_path: &Path) -> io::Result<Option<String>> {
     match fs::read_to_string(engine_path) {
