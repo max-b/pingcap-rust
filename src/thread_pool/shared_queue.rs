@@ -51,22 +51,20 @@ impl Worker {
         let stealers: Vec<Stealer<BoxedFunc>> = Vec::new();
         let senders: Vec<Sender<Message>> = Vec::new();
 
-        let worker = Self {
+        Self {
             receiver,
             global,
             local,
             stealers,
             senders,
-        };
-
-        worker
+        }
     }
 
     pub fn start(mut self) -> thread::JoinHandle<()> {
         thread::spawn(move || {
             loop {
-                match self.receiver.try_recv() {
-                    Ok(message) => match message {
+                if let Ok(message) = self.receiver.try_recv() {
+                    match message {
                         Message::Terminate => {
                             break;
                         }
@@ -76,15 +74,11 @@ impl Worker {
                         Message::AddSender(sender) => {
                             self.senders.push(sender);
                         }
-                    },
-                    Err(_) => {} // No message available yet
+                    };
                 };
 
-                match find_task(&self.local, &self.global, &self.stealers) {
-                    Some(f) => {
-                        f();
-                    }
-                    None => {}
+                if let Some(f) = find_task(&self.local, &self.global, &self.stealers) {
+                    f();
                 }
             }
         })
@@ -96,15 +90,8 @@ impl Drop for Worker {
         if thread::panicking() {
             let local = WorkerQueue::<BoxedFunc>::new_fifo();
             // Need to move all tasks from panicking queue to new worker queue
-            loop {
-                match self.local.pop() {
-                    Some(t) => {
-                        local.push(t);
-                    }
-                    None => {
-                        break;
-                    }
-                }
+            while let Some(t) = self.local.pop() {
+                local.push(t);
             }
 
             let new_stealer = local.stealer();

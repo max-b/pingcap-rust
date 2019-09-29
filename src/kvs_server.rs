@@ -1,7 +1,7 @@
 use crate::kv::KvsEngine;
 use crate::thread_pool::ThreadPool;
 use base64;
-use slog::{info, Logger};
+use slog::{info, error, Logger};
 use std::io;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
@@ -116,9 +116,11 @@ impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
             let stream = stream?;
             let store = self.store.clone();
             let logger = self.logger.clone();
-            self.thread_pool.spawn(|| {
+            self.thread_pool.spawn(move || {
                 // TODO: handle error
-                handle_incoming(store, stream, logger);
+                if let Err(e) = handle_incoming(store, stream, logger.clone()) {
+                    error!(logger, "error handling incoming"; "error" => %&e);
+                }
             })
         }
         Ok(())
