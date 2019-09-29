@@ -1,15 +1,17 @@
+use rayon;
 use crate::errors::Result;
 use crate::thread_pool::ThreadPool;
 
 /// TODO: Documentation
-pub struct RayonThreadPool {}
+pub struct RayonThreadPool(rayon::ThreadPool);
 
 impl ThreadPool for RayonThreadPool {
     fn new(threads: u32) -> Result<Self> {
-        unimplemented!();
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(threads as usize).build().expect("failed to create a thread pool");
+        Ok(Self(pool))
     }
 
     fn spawn<F>(&self, job: F) where F: FnOnce() + Send + 'static {
-        unimplemented!();
+        self.0.install(job);
     }
 }

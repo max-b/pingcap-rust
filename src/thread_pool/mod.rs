@@ -2,7 +2,7 @@ use crate::errors::Result;
 
 pub use naive::NaiveThreadPool;
 pub use shared_queue::SharedQueueThreadPool;
-pub use rayon::RayonThreadPool;
+pub use self::rayon::RayonThreadPool;
 
 mod naive;
 mod shared_queue;
