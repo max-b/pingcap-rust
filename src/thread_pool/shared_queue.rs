@@ -1,21 +1,17 @@
-use std::iter;
-use std::thread;
-use std::sync::Arc;
-use crossbeam::deque::{
-    Injector as InjectorQueue, 
-    Stealer,
-    Worker as WorkerQueue
-};
-use crossbeam::crossbeam_channel::{Sender, Receiver, unbounded};
 use crate::errors::Result;
 use crate::thread_pool::ThreadPool;
+use crossbeam::crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam::deque::{Injector as InjectorQueue, Stealer, Worker as WorkerQueue};
+use std::iter;
+use std::sync::Arc;
+use std::thread;
 
 type BoxedFunc = Box<dyn FnOnce() + Send + 'static>;
 
 enum Message {
     Terminate,
     AddStealer(Stealer<BoxedFunc>),
-    AddSender(Sender<Message>)
+    AddSender(Sender<Message>),
 }
 
 fn find_task(
@@ -28,7 +24,8 @@ fn find_task(
         // Otherwise, we need to look for a task elsewhere.
         iter::repeat_with(|| {
             // Try stealing a batch of tasks from the global queue.
-            shared_global.steal_batch_and_pop(local)
+            shared_global
+                .steal_batch_and_pop(local)
                 // Or try stealing a task from one of the other threads.
                 .or_else(|| stealers.iter().map(|s| s.steal()).collect())
         })
@@ -45,7 +42,7 @@ struct Worker {
     local: WorkerQueue<BoxedFunc>,
     global: Arc<InjectorQueue<BoxedFunc>>,
     stealers: Vec<Stealer<BoxedFunc>>,
-    senders: Vec<Sender<Message>>
+    senders: Vec<Sender<Message>>,
 }
 
 impl Worker {
@@ -59,7 +56,7 @@ impl Worker {
             global,
             local,
             stealers,
-            senders
+            senders,
         };
 
         worker
@@ -69,26 +66,24 @@ impl Worker {
         thread::spawn(move || {
             loop {
                 match self.receiver.try_recv() {
-                    Ok(message) => {
-                        match message {
-                            Message::Terminate => {
-                                break;
-                            },
-                            Message::AddStealer(stealer) => {
-                                self.stealers.push(stealer);
-                            },
-                            Message::AddSender(sender) => {
-                                self.senders.push(sender);
-                            }
+                    Ok(message) => match message {
+                        Message::Terminate => {
+                            break;
+                        }
+                        Message::AddStealer(stealer) => {
+                            self.stealers.push(stealer);
+                        }
+                        Message::AddSender(sender) => {
+                            self.senders.push(sender);
                         }
                     },
                     Err(_) => {} // No message available yet
                 };
 
                 match find_task(&self.local, &self.global, &self.stealers) {
-                    Some(f) => { 
+                    Some(f) => {
                         f();
-                    },
+                    }
                     None => {}
                 }
             }
@@ -105,8 +100,10 @@ impl Drop for Worker {
                 match self.local.pop() {
                     Some(t) => {
                         local.push(t);
-                    },
-                    None => { break; }
+                    }
+                    None => {
+                        break;
+                    }
                 }
             }
 
@@ -114,7 +111,9 @@ impl Drop for Worker {
             let mut stealers = self.stealers.clone();
 
             for sender in &self.senders {
-                sender.send(Message::AddStealer(new_stealer.clone())).expect("send failed");
+                sender
+                    .send(Message::AddStealer(new_stealer.clone()))
+                    .expect("send failed");
             }
 
             stealers.push(new_stealer);
@@ -124,7 +123,7 @@ impl Drop for Worker {
                 senders: self.senders.clone(),
                 receiver: self.receiver.clone(),
                 global: self.global.clone(),
-                stealers
+                stealers,
             };
 
             worker.start();
@@ -141,7 +140,9 @@ pub struct SharedQueueThreadPool {
 impl Drop for SharedQueueThreadPool {
     fn drop(&mut self) {
         for sender in &self.senders {
-            sender.send(Message::Terminate).expect("failed sending message");
+            sender
+                .send(Message::Terminate)
+                .expect("failed sending message");
         }
     }
 }
@@ -162,9 +163,13 @@ impl ThreadPool for SharedQueueThreadPool {
         }
 
         for sender in &senders {
-            sender.send(Message::AddSender(sender.clone())).expect("send failed");
+            sender
+                .send(Message::AddSender(sender.clone()))
+                .expect("send failed");
             for stealer in &stealers {
-                sender.send(Message::AddStealer(stealer.clone())).expect("send failed");
+                sender
+                    .send(Message::AddStealer(stealer.clone()))
+                    .expect("send failed");
             }
         }
 
@@ -172,11 +177,16 @@ impl ThreadPool for SharedQueueThreadPool {
             worker.start();
         }
 
-
-        Ok(Self{ shared_injector, senders })
+        Ok(Self {
+            shared_injector,
+            senders,
+        })
     }
 
-    fn spawn<T>(&self, job: T) where T: FnOnce() + Send + 'static {
+    fn spawn<T>(&self, job: T)
+    where
+        T: FnOnce() + Send + 'static,
+    {
         self.shared_injector.push(Box::new(job));
     }
 }

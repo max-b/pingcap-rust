@@ -1,6 +1,6 @@
-use std::thread;
 use crate::errors::Result;
 use crate::thread_pool::ThreadPool;
+use std::thread;
 
 /// TODO: Documentation
 pub struct NaiveThreadPool {}
@@ -10,7 +10,10 @@ impl ThreadPool for NaiveThreadPool {
         Ok(Self {})
     }
 
-    fn spawn<F>(&self, job: F) where F: FnOnce() + Send + 'static {
+    fn spawn<F>(&self, job: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
         let handle = thread::spawn(job);
     }
 }

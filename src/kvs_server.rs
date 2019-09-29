@@ -4,7 +4,7 @@ use base64;
 use slog::{info, Logger};
 use std::io;
 use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpStream, TcpListener};
+use std::net::{TcpListener, TcpStream};
 
 /// A struct implementing a key value server with
 /// a pluggable db backend
@@ -24,7 +24,11 @@ enum ServerResult {
     Err(String),
 }
 
-fn handle_incoming<E: KvsEngine>(store: E, mut stream: TcpStream, logger: Logger) -> io::Result<()> {
+fn handle_incoming<E: KvsEngine>(
+    store: E,
+    mut stream: TcpStream,
+    logger: Logger,
+) -> io::Result<()> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut incoming_string = String::new();
 
@@ -90,7 +94,6 @@ fn handle_incoming<E: KvsEngine>(store: E, mut stream: TcpStream, logger: Logger
     stream.flush()?;
     Ok(())
 }
-
 
 impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
     /// Create a new key value server listening on an address with

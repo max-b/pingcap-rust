@@ -14,7 +14,7 @@ use sloggers::terminal::{Destination, TerminalLoggerBuilder};
 use sloggers::types::Severity;
 use sloggers::Build;
 
-use kvs::{KvStore, KvsEngine, KvsServer, SledKvsEngine, ThreadPool, NaiveThreadPool};
+use kvs::{KvStore, KvsEngine, KvsServer, NaiveThreadPool, SledKvsEngine, ThreadPool};
 
 use clap::{App, Arg};
 

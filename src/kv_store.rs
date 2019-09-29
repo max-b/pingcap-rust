@@ -1,4 +1,3 @@
-use std::sync::{Arc, RwLock};
 use crate::errors::{KvStoreError, Result};
 use crate::kv::KvsEngine;
 use serde::{Deserialize, Serialize};
@@ -8,6 +7,7 @@ use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{BufReader, BufWriter, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 use std::{ffi, fmt, fs};
 
 /// An enum which defines records
@@ -90,7 +90,10 @@ impl KvsEngine for KvStore {
     /// # }
     /// ```
     fn get(&self, key: String) -> Result<Option<String>> {
-        let mut shared = self.0.write().map_err(|e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
+        let mut shared = self
+            .0
+            .write()
+            .map_err(|e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
         let record_location = shared.log_index.get(&key).cloned();
 
         match record_location {
@@ -129,7 +132,10 @@ impl KvsEngine for KvStore {
     /// ```
     fn set(&self, key: String, value: String) -> Result<()> {
         let record = Record::Set(key.clone(), value.clone());
-        let mut shared = self.0.write().map_err(|e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
+        let mut shared = self
+            .0
+            .write()
+            .map_err(|e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
         let new_record_location = shared.serialize_and_write(&record)?;
 
         if let Some(prev) = shared.log_index.insert(key, new_record_location.clone()) {
@@ -162,7 +168,10 @@ impl KvsEngine for KvStore {
     /// # }
     /// ```
     fn remove(&self, key: String) -> Result<()> {
-        let mut shared = self.0.write().map_err(|e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
+        let mut shared = self
+            .0
+            .write()
+            .map_err(|e| KvStoreError::LockError("Error getting write lock".to_owned()))?;
 
         let (record, return_val, record_size) = {
             match shared.log_index.entry(key.clone()) {
@@ -397,9 +406,7 @@ impl SharedKvStore {
     /// Get the active log file, potentially opening a new one
     /// for writing to
     fn setup_active_log_file(&mut self) -> Result<()> {
-        let active_log_file_len = {
-            self.active_log.file.metadata()?.len()
-        };
+        let active_log_file_len = { self.active_log.file.metadata()?.len() };
 
         if active_log_file_len > MAX_FILE_SIZE {
             self.open_new_log_file()?;
