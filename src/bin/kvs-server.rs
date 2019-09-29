@@ -9,14 +9,16 @@ extern crate kvs;
 use std::fs;
 use std::io;
 use std::path::Path;
+use std::convert::TryInto;
 
 use sloggers::terminal::{Destination, TerminalLoggerBuilder};
 use sloggers::types::Severity;
 use sloggers::Build;
-
-use kvs::{KvStore, KvsEngine, KvsServer, NaiveThreadPool, SledKvsEngine, ThreadPool};
-
 use clap::{App, Arg};
+use num_cpus;
+
+use kvs::{KvStore, KvsServer, RayonThreadPool, SharedQueueThreadPool, SledKvsEngine, ThreadPool};
+
 
 fn get_engine(engine_path: &Path) -> io::Result<Option<String>> {
     match fs::read_to_string(engine_path) {
@@ -85,9 +87,8 @@ fn main() -> io::Result<()> {
 
     fs::write(&engine_path, engine_opt.as_bytes())?;
 
-    // NaiveThreadPool doesn't actually use a size
-    // TODO: unwrap
-    let thread_pool = NaiveThreadPool::new(99).unwrap();
+    // let thread_pool = RayonThreadPool::new(num_cpus::get().try_into().unwrap()).unwrap();
+    let thread_pool = SharedQueueThreadPool::new(num_cpus::get().try_into().unwrap()).unwrap();
 
     // TODO: better else condition?
     if engine_opt == "kvs" {
