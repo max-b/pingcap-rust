@@ -1,7 +1,7 @@
 use crate::kv::KvsEngine;
 use crate::thread_pool::ThreadPool;
 use base64;
-use slog::{info, error, Logger};
+use slog::{error, info, Logger};
 use std::io;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};

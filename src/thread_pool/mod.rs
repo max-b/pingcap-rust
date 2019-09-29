@@ -3,10 +3,12 @@ use crate::errors::Result;
 pub use self::rayon::RayonThreadPool;
 pub use naive::NaiveThreadPool;
 pub use shared_queue::SharedQueueThreadPool;
+pub use work_stealing::WorkStealingThreadPool;
 
 mod naive;
 mod rayon;
 mod shared_queue;
+mod work_stealing;
 
 /// A ThreadPool for our kvstore
 pub trait ThreadPool {
