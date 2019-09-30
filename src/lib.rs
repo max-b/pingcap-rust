@@ -5,9 +5,9 @@
 
 pub use errors::Result;
 pub use kv::KvsEngine;
-pub use kv_store::KvStore;
-pub use kvs_server::KvsServer;
-pub use kvs_sled::SledKvsEngine;
+pub use store::KvStore;
+pub use server::KvsServer;
+pub use crate::sled::SledKvsEngine;
 pub use thread_pool::{NaiveThreadPool, RayonThreadPool, SharedQueueThreadPool, ThreadPool};
 
 /// TODO: documentation
@@ -15,6 +15,6 @@ pub mod thread_pool;
 
 mod errors;
 mod kv;
-mod kv_store;
-mod kvs_server;
-mod kvs_sled;
+mod store;
+mod server;
+mod sled;
