@@ -13,6 +13,43 @@ pub enum KvStoreError {
     NonExistentKeyError(String),
     SerializationError(String),
     LockError(String),
+    ClientError(String),
+}
+
+impl From<KvStoreError> for io::Error {
+    fn from(err: KvStoreError) -> Self {
+        match err {
+            KvStoreError::Io(err) => err,
+            KvStoreError::EncoderError(err) => io::Error::new(
+                io::ErrorKind::Other,
+                err.description(),
+            ),
+            KvStoreError::DecoderError(err) => io::Error::new(
+                io::ErrorKind::Other,
+                err.description(),
+            ),
+            KvStoreError::SledError(err) => io::Error::new(
+                io::ErrorKind::Other,
+                err.description(),
+            ),
+            KvStoreError::NonExistentKeyError(err) => io::Error::new(
+                io::ErrorKind::Other,
+                err,
+            ),
+            KvStoreError::SerializationError(err) => io::Error::new(
+                io::ErrorKind::Other,
+                err,
+            ),
+            KvStoreError::LockError(err) => io::Error::new(
+                io::ErrorKind::Other,
+                err,
+            ),
+            KvStoreError::ClientError(err) => io::Error::new(
+                io::ErrorKind::Other,
+                err,
+            ),
+        }
+    }
 }
 
 impl From<io::Error> for KvStoreError {
@@ -41,7 +78,7 @@ impl From<sled::Error> for KvStoreError {
 
 impl fmt::Display for KvStoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "KvStoreError")
+        write!(f, "{}", self.description())
     }
 }
 
@@ -55,6 +92,7 @@ impl Error for KvStoreError {
             KvStoreError::NonExistentKeyError(string) => string,
             KvStoreError::SerializationError(string) => string,
             KvStoreError::LockError(string) => string,
+            KvStoreError::ClientError(string) => string,
         }
     }
 
@@ -67,6 +105,7 @@ impl Error for KvStoreError {
             KvStoreError::NonExistentKeyError(_) => None,
             KvStoreError::SerializationError(_) => None,
             KvStoreError::LockError(_) => None,
+            KvStoreError::ClientError(_) => None,
         }
     }
 }

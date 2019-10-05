@@ -1,13 +1,12 @@
 extern crate clap;
 extern crate kvs;
 
-use base64;
 use std::io;
-use std::io::prelude::*;
-use std::net::TcpStream;
 use std::process;
 
 use clap::{App, Arg, SubCommand};
+
+use kvs::{KvsClient, Command};
 
 fn main() -> io::Result<()> {
     let addr_arg = Arg::with_name("addr")
@@ -67,64 +66,53 @@ fn main() -> io::Result<()> {
 
     let default_addr = "127.0.0.1:4000";
 
-    let (addr, command) = if let Some(matches) = matches.subcommand_matches("get") {
+    let arg_results = if let Some(matches) = matches.subcommand_matches("get") {
         let addr = matches.value_of("addr").unwrap_or(default_addr);
-        (
+        Some((
             addr,
-            format!("GET:{}", matches.value_of("key").unwrap().to_owned()),
-        )
+            Command::Get(matches.value_of("key").unwrap().to_owned())
+        ))
     } else if let Some(matches) = matches.subcommand_matches("set") {
         let addr = matches.value_of("addr").unwrap_or(default_addr);
-        (
+        Some((
             addr,
-            format!(
-                "SET:{}:{}",
+            Command::Set(
                 matches.value_of("key").unwrap().to_owned(),
                 matches.value_of("value").unwrap().to_owned()
-            ),
-        )
+            )
+        ))
     } else if let Some(matches) = matches.subcommand_matches("rm") {
         let addr = matches.value_of("addr").unwrap_or(default_addr);
-        (
+        Some((
             addr,
-            format!("REMOVE:{}", matches.value_of("key").unwrap().to_owned()),
-        )
+            Command::Remove(matches.value_of("key").unwrap().to_owned())
+        ))
     } else {
-        (default_addr, String::from("nope"))
+        None
     };
 
-    let mut stream = TcpStream::connect(addr)?;
-    stream.write_all(command.as_bytes())?;
-    stream.write_all(&b"\n".to_owned())?;
-    stream.flush()?;
-
-    let mut incoming_string = String::new();
-    stream.read_to_string(&mut incoming_string)?;
-
-    let mut sections = incoming_string.trim_end().split(':');
-    let success_string = sections.next();
-
-    if let Some(success_string) = success_string {
-        let response = sections
-            .next()
-            .map(|v| String::from_utf8(base64::decode(v).unwrap()).unwrap())
-            .unwrap_or_else(|| "Undefined response from server".to_owned());
-        if success_string == "ERR" {
-            eprintln!("Error: {}", response);
-            process::exit(1);
-        } else if success_string == "OK" {
-            if response == "NONE" {
-                println!("Key not found");
-            } else if response.trim() != "" {
-                println!("{}", response);
+    match arg_results {
+        Some((addr, command)) => {
+            let mut client = KvsClient::new(addr.to_owned())?;
+            let result = client.send(command);
+            match result {
+                Err(err) => {
+                    eprintln!("Error: {}", err);
+                    process::exit(1);
+                },
+                Ok(response) => {
+                    if response == "NONE" {
+                        println!("Key not found");
+                    } else if response.trim() != "" {
+                        println!("{}", response);
+                    }
+                }
             }
-        } else {
-            eprintln!("Error: {}", response);
+        },
+        None => {
+            eprintln!("Command invalid: {:?}", matches);
             process::exit(1);
         }
-    } else {
-        println!("Error: Didn't receive any response from server");
-        process::exit(1);
     }
     Ok(())
 }
