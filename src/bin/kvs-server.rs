@@ -90,15 +90,19 @@ fn main() -> io::Result<()> {
     let thread_pool = SharedQueueThreadPool::new(num_cpus::get().try_into().unwrap()).unwrap();
 
     // TODO: better else condition?
-    if engine_opt == "kvs" {
+    let handle = if engine_opt == "kvs" {
         let store = KvStore::open(data_path).expect("can't open KvStore");
-        let mut server = KvsServer::new(addr, store, thread_pool, logger);
-        server.start()
+        let mut server = KvsServer::new(addr, store, logger);
+        server.start(thread_pool)?
     } else if engine_opt == "sled" {
         let store = SledKvsEngine::open(data_path).expect("can't open sled db");
-        let mut server = KvsServer::new(addr, store, thread_pool, logger);
-        server.start()
+        let mut server = KvsServer::new(addr, store, logger);
+        server.start(thread_pool)?
     } else {
         panic!("server_opt not properly specified");
-    }
+    };
+
+    handle.join().unwrap();
+
+    Ok(())
 }

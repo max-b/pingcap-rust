@@ -37,7 +37,7 @@ type RecordLocation = (PathBuf, u64, u64);
 /// A mapping between a key and a (file log path, file location, record size) tuple
 type LogFileIndexMap = HashMap<String, RecordLocation>;
 
-/// TODO: Documentation
+/// KvsStore data which has to be shared across threads
 #[derive(Debug)]
 pub struct SharedKvStore {
     log_index: LogFileIndexMap,
@@ -49,19 +49,12 @@ pub struct SharedKvStore {
     bytes_for_compaction: u64,
 }
 
-/// TODO: documentationn
+/// KvsStore backing which each thread can hold a copy of
 #[derive(Clone, Debug)]
 pub struct KvStore(Arc<RwLock<SharedKvStore>>);
 
 static COMPACT_AFTER_BYTE_SIZE: u64 = 2048;
 static MAX_FILE_SIZE: u64 = 20480;
-
-// impl Clone for KvStore {
-//     fn clone(&self) -> Self {
-//         KvStore {
-//             data: self.data.clone
-//     }
-// }
 
 impl fmt::Display for KvStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

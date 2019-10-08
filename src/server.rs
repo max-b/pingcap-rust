@@ -1,34 +1,44 @@
 use crate::kv::KvsEngine;
 use crate::thread_pool::ThreadPool;
 use base64;
+use crossbeam::crossbeam_channel::{unbounded, Receiver, Sender};
 use slog::{error, info, Logger};
 use std::io;
 use std::io::{BufRead, BufReader, Write};
+use std::marker::Send;
 use std::net::{TcpListener, TcpStream};
+use std::thread;
 
 /// A struct implementing a key value server with
 /// a pluggable db backend
-pub struct KvsServer<E: KvsEngine, P: ThreadPool> {
+pub struct KvsServer<E: KvsEngine> {
     /// Address the server will listen on
     addr: String,
     /// Pluggable db backend
     store: E,
-    /// A thread pool to run commands
-    thread_pool: P,
     /// Logger
     logger: Logger,
+    /// A crossbeam channel sender for notifying ourselves when to exit
+    sender: Sender<Message>,
+    /// A crossbeam channel receiver for knowing when to exit
+    receiver: Receiver<Message>,
+}
+
+enum Message {
+    Terminate,
 }
 
 enum ServerResult {
     Ok(String),
     Err(String),
+    Exit,
 }
 
 fn handle_incoming<E: KvsEngine>(
     store: E,
-    mut stream: TcpStream,
+    stream: TcpStream,
     logger: Logger,
-) -> io::Result<()> {
+) -> io::Result<(ServerResult, TcpStream)> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut incoming_string = String::new();
 
@@ -74,6 +84,8 @@ fn handle_incoming<E: KvsEngine>(
                 |_err| ServerResult::Err("Key not found".to_owned()),
                 |_| ServerResult::Ok("".to_owned()),
             )
+        } else if command == "EXIT" {
+            ServerResult::Exit
         } else {
             ServerResult::Err("Command not recognized".to_owned())
         }
@@ -81,7 +93,11 @@ fn handle_incoming<E: KvsEngine>(
         ServerResult::Err("No command sent".to_owned())
     };
 
-    match store_response {
+    Ok((store_response, stream))
+}
+
+fn handle_response(result: ServerResult, mut stream: TcpStream) -> io::Result<()> {
+    match result {
         ServerResult::Ok(response) => {
             stream.write_all(b"OK:")?;
             stream.write_all(base64::encode(response.as_bytes()).as_bytes())?;
@@ -90,39 +106,82 @@ fn handle_incoming<E: KvsEngine>(
             stream.write_all(b"ERR:")?;
             stream.write_all(base64::encode(response.as_bytes()).as_bytes())?;
         }
+        _ => {}
     };
     stream.flush()?;
     Ok(())
 }
 
-impl<E: KvsEngine, P: ThreadPool> KvsServer<E, P> {
+impl<E: KvsEngine> KvsServer<E> {
     /// Create a new key value server listening on an address with
     /// a pluggable storage db backend
-    pub fn new(addr: String, store: E, thread_pool: P, logger: Logger) -> Self {
+    pub fn new(addr: String, store: E, logger: Logger) -> Self {
+        let (sender, receiver) = unbounded();
         Self {
             addr,
             store,
-            thread_pool,
             logger,
+            sender,
+            receiver,
         }
     }
 
-    /// TODO: documentation
-    /// Start the key value server listening for connections
-    pub fn start(&mut self) -> io::Result<()> {
-        let listener = TcpListener::bind(&self.addr)?;
+    /// Stop the key value server listening
+    pub fn stop(&mut self) {
+        self.sender
+            .send(Message::Terminate)
+            .expect("failed sending message");
+    }
 
-        for stream in listener.incoming() {
-            let stream = stream?;
-            let store = self.store.clone();
-            let logger = self.logger.clone();
-            self.thread_pool.spawn(move || {
-                // TODO: handle error
-                if let Err(e) = handle_incoming(store, stream, logger.clone()) {
-                    error!(logger, "error handling incoming"; "error" => %&e);
+    /// Start the key value server listening for connections
+    pub fn start<P: ThreadPool + Send + 'static>(
+        &mut self,
+        thread_pool: P,
+    ) -> io::Result<thread::JoinHandle<()>> {
+        let store = self.store.clone();
+        let logger = self.logger.clone();
+
+        let addr = self.addr.clone();
+        let sender = self.sender.clone();
+        let receiver = self.receiver.clone();
+        let handle = thread::spawn(move || {
+            // TODO: error handling for all of these unwraps
+            let listener = TcpListener::bind(&addr).unwrap();
+
+            for stream in listener.incoming() {
+                let stream = stream.unwrap();
+                let store = store.clone();
+                let logger = logger.clone();
+                let sender = sender.clone();
+                let receiver = receiver.clone();
+
+                thread_pool.spawn(move || {
+                    // TODO: handle error
+                    match handle_incoming(store, stream, logger.clone()) {
+                        Err(e) => {
+                            error!(logger, "error handling incoming"; "error" => %&e);
+                        }
+                        Ok((store_response, stream)) => {
+                            if let ServerResult::Exit = store_response {
+                                sender
+                                    .send(Message::Terminate)
+                                    .expect("failed sending message");
+                            } else {
+                                let result = handle_response(store_response, stream);
+                                if let Err(e) = result {
+                                    error!(logger, "error responding"; "error" => %&e);
+                                }
+                            }
+                        }
+                    }
+                });
+                if let Ok(message) = receiver.try_recv() {
+                    if let Message::Terminate = message {
+                        break;
+                    }
                 }
-            })
-        }
-        Ok(())
+            }
+        });
+        Ok(handle)
     }
 }

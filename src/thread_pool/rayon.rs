@@ -2,7 +2,8 @@ use crate::errors::Result;
 use crate::thread_pool::ThreadPool;
 use rayon;
 
-/// TODO: Documentation
+/// Implementation of the ThreadPool trait with a
+/// RayonThreadPool as backing
 pub struct RayonThreadPool(rayon::ThreadPool);
 
 impl ThreadPool for RayonThreadPool {

@@ -43,7 +43,8 @@ impl Drop for Worker {
     }
 }
 
-/// TODO: Documentation
+/// Implementation of the ThreadPool trait
+/// with threads getting new jobs via crossbeam channels
 pub struct SharedQueueThreadPool {
     sender: Sender<Message>,
 }

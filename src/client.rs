@@ -1,51 +1,44 @@
+use crate::errors::{KvStoreError, Result};
 use std::io::prelude::*;
 use std::net::TcpStream;
-use crate::errors::{KvStoreError, Result};
 
-/// TODO: documentation
+/// A KvsServer command
 #[derive(Debug)]
 pub enum Command {
-    /// TODO: documentation
+    /// KvsServer GET command
     Get(String),
-    /// TODO: documentation
+    /// KvsServer SET command
     Set(String, String),
-    /// TODO: documentation
-    Remove(String)
+    /// KvsServer REMOVE command
+    Remove(String),
+    /// KvsServer EXIT command for prompting server to exit
+    Exit,
 }
 
-/// TODO: documentation
+/// A Client for sending commands to a KvsServer
+#[derive(Debug)]
 pub struct KvsClient {
     stream: TcpStream,
 }
 
 impl KvsClient {
-    /// TODO: documentation
+    /// Create a new KvsClient
     pub fn new(addr: String) -> Result<Self> {
         let stream = TcpStream::connect(addr)?;
-        Ok(Self {
-            stream
-        })
+        Ok(Self { stream })
     }
 
     fn serialize(&self, command: Command) -> String {
         match command {
-            Command::Get(key) => {
-                format!("GET:{}", key)
-            },
-            Command::Set(key, value) => {
-                format!(
-                    "SET:{}:{}",
-                    key,
-                    value,
-                )
-            },
-            Command::Remove(key) => {
-                format!("REMOVE:{}", key)
-            }
+            Command::Get(key) => format!("GET:{}", key),
+            Command::Set(key, value) => format!("SET:{}:{}", key, value,),
+            Command::Remove(key) => format!("REMOVE:{}", key),
+            Command::Exit => format!("EXIT"),
         }
     }
 
-    /// TODO: documentation
+    /// Send a command to the KvsServer where the result string is the success response
+    /// from the server
     pub fn send(&mut self, command: Command) -> Result<String> {
         let serialized = self.serialize(command);
         self.stream.write_all(serialized.as_bytes())?;
@@ -58,8 +51,7 @@ impl KvsClient {
         self.handle_responses(incoming_string)
     }
 
-    /// TODO: documentation
-    pub fn handle_responses (&self, incoming: String) -> Result<String> {
+    fn handle_responses(&self, incoming: String) -> Result<String> {
         let mut sections = incoming.trim_end().split(':');
         let success_string = sections.next();
 
@@ -74,7 +66,9 @@ impl KvsClient {
                 Err(KvStoreError::ClientError(response))
             }
         } else {
-            Err(KvStoreError::ClientError("Error: Didn't receive any response from server".to_owned()))
+            Err(KvStoreError::ClientError(
+                "Error: Didn't receive any response from server".to_owned(),
+            ))
         }
     }
 }

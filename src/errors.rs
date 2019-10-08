@@ -20,34 +20,17 @@ impl From<KvStoreError> for io::Error {
     fn from(err: KvStoreError) -> Self {
         match err {
             KvStoreError::Io(err) => err,
-            KvStoreError::EncoderError(err) => io::Error::new(
-                io::ErrorKind::Other,
-                err.description(),
-            ),
-            KvStoreError::DecoderError(err) => io::Error::new(
-                io::ErrorKind::Other,
-                err.description(),
-            ),
-            KvStoreError::SledError(err) => io::Error::new(
-                io::ErrorKind::Other,
-                err.description(),
-            ),
-            KvStoreError::NonExistentKeyError(err) => io::Error::new(
-                io::ErrorKind::Other,
-                err,
-            ),
-            KvStoreError::SerializationError(err) => io::Error::new(
-                io::ErrorKind::Other,
-                err,
-            ),
-            KvStoreError::LockError(err) => io::Error::new(
-                io::ErrorKind::Other,
-                err,
-            ),
-            KvStoreError::ClientError(err) => io::Error::new(
-                io::ErrorKind::Other,
-                err,
-            ),
+            KvStoreError::EncoderError(err) => {
+                io::Error::new(io::ErrorKind::Other, err.description())
+            }
+            KvStoreError::DecoderError(err) => {
+                io::Error::new(io::ErrorKind::Other, err.description())
+            }
+            KvStoreError::SledError(err) => io::Error::new(io::ErrorKind::Other, err.description()),
+            KvStoreError::NonExistentKeyError(err) => io::Error::new(io::ErrorKind::Other, err),
+            KvStoreError::SerializationError(err) => io::Error::new(io::ErrorKind::Other, err),
+            KvStoreError::LockError(err) => io::Error::new(io::ErrorKind::Other, err),
+            KvStoreError::ClientError(err) => io::Error::new(io::ErrorKind::Other, err),
         }
     }
 }

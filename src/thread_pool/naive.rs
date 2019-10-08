@@ -2,7 +2,8 @@ use crate::errors::Result;
 use crate::thread_pool::ThreadPool;
 use std::thread;
 
-/// TODO: Documentation
+/// A naive thread pool which simply spawns a 
+/// new thread every time `spawn` is called
 pub struct NaiveThreadPool {}
 
 impl ThreadPool for NaiveThreadPool {

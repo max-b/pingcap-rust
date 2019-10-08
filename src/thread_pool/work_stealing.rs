@@ -116,7 +116,11 @@ impl Drop for Worker {
     }
 }
 
-/// TODO: Documentation
+/// A *very* rudimentary attempt at implementing the 
+/// ThreadPool trait with crossbeam work stealing
+/// dequeues. Hot loops when looking for new work.
+/// There's probably some fancy clever sleep
+/// addition that is required to fix it.
 pub struct WorkStealingThreadPool {
     shared_injector: Arc<InjectorQueue<BoxedFunc>>,
     senders: Vec<Sender<Message>>,

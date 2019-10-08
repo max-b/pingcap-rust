@@ -6,7 +6,7 @@ use std::process;
 
 use clap::{App, Arg, SubCommand};
 
-use kvs::{KvsClient, Command};
+use kvs::{Command, KvsClient};
 
 fn main() -> io::Result<()> {
     let addr_arg = Arg::with_name("addr")
@@ -58,6 +58,11 @@ fn main() -> io::Result<()> {
                 )
                 .arg(addr_arg.clone()),
         )
+        .subcommand(
+            SubCommand::with_name("exit")
+                .about("causes the server to exit")
+                .arg(addr_arg.clone()),
+        )
         .get_matches();
 
     if matches.subcommand_name().is_none() {
@@ -70,7 +75,7 @@ fn main() -> io::Result<()> {
         let addr = matches.value_of("addr").unwrap_or(default_addr);
         Some((
             addr,
-            Command::Get(matches.value_of("key").unwrap().to_owned())
+            Command::Get(matches.value_of("key").unwrap().to_owned()),
         ))
     } else if let Some(matches) = matches.subcommand_matches("set") {
         let addr = matches.value_of("addr").unwrap_or(default_addr);
@@ -78,15 +83,18 @@ fn main() -> io::Result<()> {
             addr,
             Command::Set(
                 matches.value_of("key").unwrap().to_owned(),
-                matches.value_of("value").unwrap().to_owned()
-            )
+                matches.value_of("value").unwrap().to_owned(),
+            ),
         ))
     } else if let Some(matches) = matches.subcommand_matches("rm") {
         let addr = matches.value_of("addr").unwrap_or(default_addr);
         Some((
             addr,
-            Command::Remove(matches.value_of("key").unwrap().to_owned())
+            Command::Remove(matches.value_of("key").unwrap().to_owned()),
         ))
+    } else if let Some(matches) = matches.subcommand_matches("exit") {
+        let addr = matches.value_of("addr").unwrap_or(default_addr);
+        Some((addr, Command::Exit))
     } else {
         None
     };
@@ -99,7 +107,7 @@ fn main() -> io::Result<()> {
                 Err(err) => {
                     eprintln!("Error: {}", err);
                     process::exit(1);
-                },
+                }
                 Ok(response) => {
                     if response == "NONE" {
                         println!("Key not found");
@@ -108,7 +116,7 @@ fn main() -> io::Result<()> {
                     }
                 }
             }
-        },
+        }
         None => {
             eprintln!("Command invalid: {:?}", matches);
             process::exit(1);
